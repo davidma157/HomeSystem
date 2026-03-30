@@ -1,0 +1,39 @@
+{
+	"folders": [
+		{
+			"name": "TestI2C",
+			"path": "../STM32/TestI2C"
+		},
+		{
+			"path": "../HomeNetwork"
+		},
+		{
+			"name": "HomeSystem",
+			"path": "."
+		}
+	],
+	"settings": {
+		"search.exclude": {
+            "**/.pio/**": true,
+            "**/.git": true
+        },
+        "files.watcherExclude": {
+            "**/.pio/**": true
+        },
+       	"files.associations": {
+			"array": "cpp",
+			"deque": "cpp",
+			"string": "cpp",
+			"unordered_map": "cpp",
+			"unordered_set": "cpp",
+			"vector": "cpp",
+			"string_view": "cpp",
+			"initializer_list": "cpp"
+		},
+		"terminal.integrated.cwd": "${workspaceFolder:waterDetector}",
+		"vscode-node-red.url": "https://192.168.137.10:1880",
+		"vscode-node-red.settings.js": {
+			
+		}
+	}
+}
