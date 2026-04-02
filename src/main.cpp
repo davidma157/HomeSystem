@@ -12,7 +12,7 @@ extern const int bufferSize = 256;
 char payload_buffer[bufferSize];
 
 // ============= OBJETS GLOBAUX =============
-std::unique_ptr<DeviceController> controller;
+std::unique_ptr<DeviceController> deviceCtrl;
 std::unique_ptr<TemperatureReader> sensor;
 
 #ifdef DEBUG_MODE
@@ -39,10 +39,19 @@ public:
             return;
         }
 
-        Serial.println("\n----- MQTT Message Reçu -----");
+        Serial.println("\n------- MQTT Message Reçu -----");
 
         // Copier le payload dans un buffer sécurisé
-        char message[128];
+        int msgLength = 512;
+        char message[msgLength];
+        if (length > msgLength)
+        {
+            // TODO - Publier un message.
+            Serial.println("Message reçu dépasse la longueur du buffer.");
+            Serial.printf("Topic: %s\nMessage: %s\n", topic, message);
+            Serial.println("-----------------------------");
+        }
+
         size_t copyLength = (length >= sizeof(message)) ? sizeof(message) - 1 : length;
         memcpy(message, payload, copyLength);
         message[copyLength] = '\0';
@@ -77,66 +86,28 @@ private:
 
         NetworkManager *network = instance->getNetworkManager();
         ConfigManager *config = instance->getConfigManager();
-        Sensor *sensor = instance->getSensor();
+        // Sensor *sensor = instance->getSensor();
 
-        if (!network || !config || !sensor)
+        if (!network || !config)
         {
             Serial.println("✗ Composants non disponibles");
             return;
         }
 
-        const char *pos = ConfigManager::jsonFindValue(configJson, "mac");
-        if (!pos)
-        {
-            Serial.println("✗ Pas de MAC dans le message");
-            return;
-        }
-
-        char mac[20];
-        ConfigManager::jsonExtractString(pos, mac, sizeof(mac));
-
-        // Vérifier que la MAC correspond
-        if (strcmp(mac, network->getMacAddress()) != 0)
-        {
-            Serial.println("✗ MAC ne correspond pas");
-            return;
-        }
-
-        bool needsSave = false;
-
-        // Extraire et mettre à jour l'ID device
-        pos = ConfigManager::jsonFindValue(configJson, "id_device");
-        if (pos)
-        {
-            int idDevice = ConfigManager::jsonExtractInt(pos);
-            if (idDevice != config->getDeviceId())
-            {
-                config->setDeviceId(idDevice);
-                needsSave = true;
-                Serial.printf("✓ Nouveau ID device: %d\n", idDevice);
-
-                network->setTopicParameters(idDevice, sensor->getTopicDomain());
-                network->subscribeToTopics();
-            }
-        }
-
-        // Mettre à jour la config spécifique du capteur
-        if (sensor->updateConfig(configJson))
-        {
-            needsSave = true;
-        }
-
+        instance->update(configJson);
         // Sauvegarder et publier si nécessaire
+        /*
+        //TODO -- Ménage
         if (needsSave)
         {
             config->save();
-
-            config->jsonPrintConfig(payload_buffer, bufferSize);
+            instance->jsonPrintConfig(payload_buffer, bufferSize);
             Serial.println("✓ Configuration mise à jour:");
             Serial.println(payload_buffer);
 
             network->publish(TopicType::CFG, payload_buffer);
         }
+        */
     }
 
     static void handleRestart()
@@ -157,7 +128,7 @@ private:
         {
             snprintf(payload_buffer, bufferSize,
                      "{\"id_device\":%d,\"ip\":\"%s\",\"mac\":\"%s\"}",
-                     config->getDeviceId(),
+                     instance->getDeviceId(),
                      network->getIPAddress(),
                      network->getMacAddress());
 
@@ -184,26 +155,29 @@ void setup()
     try
     {
         // 1. Créer le contrôleur principal
+        /*
         sensor = std::make_unique<TemperatureReader>();
         if (!sensor)
         {
             Serial.println("ERREUR: Allocation Sensor échouée");
             ESP.restart();
         }
-        controller = std::make_unique<DeviceController>(sensor.get());
+        deviceCtrl = std::make_unique<DeviceController>(sensor.get());
+        */
 
+        deviceCtrl = std::make_unique<DeviceController>();
         // 2. Initialiser tous les composants
-        controller->initialize();
+        deviceCtrl->initialize();
 
         // 3. Configurer le callback MQTT
-        MqttHandler::setController(controller.get());
-        controller->getNetworkManager()->setMessageCallback(MqttHandler::callback);
+        MqttHandler::setController(deviceCtrl.get());
+        deviceCtrl->getNetworkManager()->setMessageCallback(MqttHandler::callback);
 
         // 4. Exécuter le cycle principal
-        controller->run();
+        deviceCtrl->run();
 
         // 5. Arrêt propre
-        controller->shutdown();
+        deviceCtrl->shutdown();
     }
     catch (const std::exception &e)
     {
@@ -224,19 +198,18 @@ void loop()
 {
 #ifdef DEBUG_MODE
     // Mode debug: simulation sans deep sleep
-    if (!homeDebug && controller)
+    if (!homeDebug && deviceCtrl)
     {
         Serial.println("\n========================================");
         Serial.println("Initialisation HomeDebug");
         Serial.println("========================================");
 
         homeDebug = std::make_unique<HomeDebug>(
-            controller->getNetworkManager(),
-            controller->getConfigManager(),
-            controller->getSensor());
+            deviceCtrl->getNetworkManager(),
+            deviceCtrl.get());
 
-        controller->getConfigManager()->jsonPrintConfig(payload_buffer, bufferSize);
-        Serial.printf("Configuration: %s\n", payload_buffer);
+        // controller->jsonPrintConfig(payload_buffer, bufferSize);
+        // Serial.printf("Configuration: %s\n", payload_buffer);
     }
 
     if (homeDebug)

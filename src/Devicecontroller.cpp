@@ -1,8 +1,12 @@
 #include "DeviceController.h"
+#include "TemperatureReader.h"
+#include "esp_log.h"
 #include "secretConfig.h"
 
-DeviceController::DeviceController(Sensor *sensor)
-    : sensor(sensor), sleepMgr(GPIO_NUM_4), isInitialized(false)
+const char TAG[] = "DEV_CTRL";
+
+DeviceController::DeviceController()
+    : sleepMgr(GPIO_NUM_4), isInitialized(false)
 {
 }
 
@@ -13,16 +17,16 @@ void DeviceController::initialize()
     // 1. Configuration LED
     configureLED();
 
+    // 4. Initialisation du réseau
+    initializeNetwork();
+
     // 2. Chargement de la configuration
-    config.load();
+    configMgr.load();
 
     // 3. Configuration du sleep manager
     sleepMgr.configureLowPowerMode();
-    sleepMgr.setTimerPeriod(config.getSleepPeriod());
+    // sleepMgr.setTimerPeriod(configDevice.sleep_period);
     sleepMgr.printWakeupReason();
-
-    // 4. Initialisation du réseau
-    initializeNetwork();
 
     // 5. Initialisation du capteur
     initializeSensor();
@@ -33,7 +37,7 @@ void DeviceController::initialize()
     Serial.println("║  • Deep sleep DÉSACTIVÉ               ║");
     Serial.println("║  • USB Serial reste actif             ║");
     Serial.println("╚═══════════════════════════════════════╝");
-    Serial.printf("Sensor: %s\n\n", sensor->getDescription());
+    // TODO Serial.printf("Sensor: %s\n\n", sensor->getDescription());
     Serial.println("═══════════════════════════════════════════\n");
 #endif
 
@@ -61,7 +65,7 @@ void DeviceController::run()
     subscribeToTopics();
 
     // 2. Attendre l'ID device si nécessaire
-    if (config.getDeviceId() == 0)
+    if (configDevice.id_device == 0)
     {
         waitForDeviceId();
     }
@@ -94,7 +98,139 @@ void DeviceController::shutdown()
     prepareForSleep();
 }
 
+bool DeviceController::update(char *configJson)
+{
+    ESP_LOGD(TAG, "-----------------------------------------------------------------------------------");
+    bool needsSave = false;
+
+    if (macVerify(configJson))
+    {
+        needsSave = setConfig(configJson);
+    }
+
+    const char *arrayPtr = ConfigManager::findArrayStart(configJson, "SS");
+    if (arrayPtr != nullptr)
+    {
+        char sensorJson[256];
+
+        ESP_LOGD(TAG, "%s", arrayPtr);
+        while (arrayPtr && (arrayPtr = ConfigManager::getNextObjectInArray(arrayPtr, sensorJson, sizeof(sensorJson))))
+        {
+            ESP_LOGD(TAG, "SensorJson:%s", sensorJson);
+            char role[32];
+            ConfigManager::jsonExtractString(ConfigManager::jsonFindValue(sensorJson, "ROLE"), role, sizeof(role));
+            ESP_LOGD(TAG, "Role:%s", role);
+            Sensor *sensor = nullptr;
+            if (strcmp(role, "TEMPERATURE") == 0)
+                sensor = new TemperatureReader();
+            // else if ... (autres types)
+            if (sensor)
+            {
+                sensor->setup(network.get());
+                sensor->updateConfig(sensorJson); // C'EST ICI : Le capteur se démerde avec son JSON
+                sensor->begin();
+                sensors.push_back(sensor);
+            }
+        }
+    }
+    else
+    {
+    }
+    /*
+    // Mettre à jour la config spécifique du capteur
+    if (sensor != nullptr)
+    {
+        if (sensor->updateConfig(configJson))
+        {
+            needsSave = true;
+        }
+        Serial.printf("--- needsSave:%d\n");
+    }
+    */
+
+    if (needsSave)
+    {
+        ConfigManager::save(configJson);
+
+        char buffer[100];
+        jsonPrintConfig(buffer, 100);
+        Serial.println("✓ Configuration mise à jour:");
+        Serial.println(buffer);
+
+        // TODO -- Revoir le message
+        network->publish(TopicType::CFG, "Config saved");
+    }
+
+    return needsSave;
+}
+
 // ========== Méthodes d'initialisation ==========
+
+bool DeviceController::setConfig(char *configJson)
+{
+    bool needsSave = false;
+
+    // Extraire et mettre à jour l'ID device
+    const char *pos = ConfigManager::jsonFindValue(configJson, "ID");
+    if (pos)
+    {
+        int idDevice = ConfigManager::jsonExtractInt(pos);
+        if (idDevice != configDevice.id_device)
+        {
+            configDevice.id_device = idDevice;
+            needsSave = true;
+            ESP_LOGI(TAG,"✓ Nouveau ID device: %d\n", idDevice);
+
+            network->setTopicParameters(idDevice);
+            network->subscribeToTopics();
+        }
+    }
+    // Extraire sleep duration
+    pos = ConfigManager::jsonFindValue(configJson, "SLEEP");
+    if (pos)
+    {
+        int sleepPeriod = ConfigManager::jsonExtractInt(pos);
+        if (configDevice.sleep_period != sleepPeriod)
+        {
+            configDevice.sleep_period = sleepPeriod;
+            needsSave = true;
+        }
+    }
+
+    pos = ConfigManager::jsonFindValue(configJson, "ALIVE");
+    if (pos)
+    {
+        int alivePeriod = ConfigManager::jsonExtractInt(pos);
+        if (configDevice.im_alive_period != alivePeriod)
+        {
+            configDevice.im_alive_period = alivePeriod;
+            needsSave = true;
+        }
+    }
+    return needsSave;
+}
+
+bool DeviceController::macVerify(char *configJson)
+{
+    const char *pos = ConfigManager::jsonFindValue(configJson, "MAC");
+    if (!pos)
+    {
+        Serial.println("✗ Pas de MAC dans le message");
+        return false;
+    }
+
+    char mac[20];
+    ConfigManager::jsonExtractString(pos, mac, sizeof(mac));
+
+    // Vérifier que la MAC correspond
+    if (strcmp(mac, network->getMacAddress()) != 0)
+    {
+        Serial.println("✗ MAC ne correspond pas");
+        return false;
+    }
+    Serial.println("---MAC OK");
+    return true;
+}
 
 void DeviceController::configureLED()
 {
@@ -125,10 +261,10 @@ void DeviceController::initializeSensor()
 {
     Serial.println("Initialisation du capteur...");
 
-    sensor->setup(network.get(), // Pointeur brut via .get()
-                  &config);
-    network->setTopicParameters(config.getDeviceId(), sensor->getTopicDomain());
-    sensor->begin();
+    // TODO - Changer la logique
+    //    sensor->setup(network.get());
+    //  network->setTopicParameters(configDevice.id_device);
+    // sensor->begin();
 
     Serial.println("✓ Capteur initialisé");
 }
@@ -204,7 +340,7 @@ void DeviceController::waitForDeviceId()
 
     snprintf(payloadBuffer, sizeof(payloadBuffer),
              "{\"id_device\":%d,\"mac\":\"%s\"}",
-             config.getDeviceId(), network->getMacAddress());
+             configDevice.id_device, network->getMacAddress());
 
     if (!network->publish(TopicType::STATUS, payloadBuffer))
     {
@@ -214,7 +350,7 @@ void DeviceController::waitForDeviceId()
 
     unsigned long startTime = millis();
 
-    while (config.getDeviceId() == 0 &&
+    while (configDevice.id_device == 0 &&
            (millis() - startTime) < DEVICE_ID_TIMEOUT_MS)
     {
         network->mqttLoop();
@@ -223,15 +359,15 @@ void DeviceController::waitForDeviceId()
     }
     Serial.println();
 
-    if (config.getDeviceId() == 0)
+    if (configDevice.id_device == 0)
     {
         Serial.println("⚠ Timeout: Aucun ID reçu");
         esp_restart();
     }
     else
     {
-        Serial.printf("✓ ID reçu: %d\n", config.getDeviceId());
-        network->setTopicParameters(config.getDeviceId(), sensor->getTopicDomain());
+        Serial.printf("✓ ID reçu: %d\n", configDevice.id_device);
+        network->setTopicParameters(configDevice.id_device);
         network->subscribeToTopics();
     }
 }
@@ -252,7 +388,8 @@ void DeviceController::waitForMqttMessages()
 void DeviceController::executeSensorJob()
 {
     Serial.println("\n--- Exécution tâche capteur ---");
-
+    // TODO
+    /*
     if (sensor)
     {
         sensor->executeJob();
@@ -262,6 +399,7 @@ void DeviceController::executeSensorJob()
     {
         Serial.println("✗ Capteur non disponible");
     }
+    */
 }
 
 // ========== Méthodes de publication ==========
@@ -270,7 +408,7 @@ void DeviceController::publishStatus(const char *status)
 {
     snprintf(payloadBuffer, sizeof(payloadBuffer),
              "{\"id_device\":%d,\"status\":\"%s\"}",
-             config.getDeviceId(), status);
+             configDevice.id_device, status);
 
     network->publish(TopicType::STATUS, payloadBuffer);
 }
@@ -287,10 +425,10 @@ void DeviceController::publishSleepMessage()
 
     snprintf(payloadBuffer, sizeof(payloadBuffer),
              "{\"id_device\":%d,\"status\":\"go_to_sleep\",\"counter\":%d}",
-             config.getDeviceId(), config.getCounter());
+             configDevice.id_device, configDevice.counter);
 
-    config.incrementCounter();
-    config.save();
+    configDevice.counter++;
+    // TODO - Vérifier configMgr.save();
 
     network->publish(TopicType::STATUS, payloadBuffer);
 }
@@ -312,8 +450,8 @@ void DeviceController::prepareForSleep()
 #ifdef DEBUG_MODE
     Serial.println("\n=== MODE DEBUG - SLEEP DÉSACTIVÉ ===");
     Serial.println("L'USB reste actif pour le debugging");
-    Serial.printf("Sleep period: %d secondes\n", config.getSleepPeriod());
-    Serial.printf("I'mAlive period: %d secondes\n", config.getAlivePeriod());
+    Serial.printf("Sleep period: %d secondes\n", configDevice.sleep_period);
+    Serial.printf("I'mAlive period: %d secondes\n", configDevice.im_alive_period);
 #else
     Serial.println("\n=== Passage en deep sleep ===");
     delay(100);

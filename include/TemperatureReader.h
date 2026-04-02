@@ -3,6 +3,7 @@
 
 #include "DHTesp.h"
 #include "Sensor.h"
+// #include <vector>
 
 #ifdef ESP32
 // #pragma message("THIS EXAMPLE IS FOR ESP8266 ONLY!")
@@ -32,11 +33,12 @@ public:
     void debugMode() {};
 #endif
 private:
+    // std::vector<Sensor *> attributs;
     uint8_t version = 2;
     uint8_t sequenceNumber = 0;
 
     static constexpr const char *topicDomain = "temp";
-    static constexpr const char *description = "Lecture Température + humidité";
+    static constexpr const char *description = "TODO";
 
     // DHT dht(DHTPIN, DHTTYPE);
     //  DHT_Unified dht(DHTPIN, DHTTYPE);

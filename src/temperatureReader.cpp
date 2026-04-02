@@ -1,4 +1,7 @@
 #include "TemperatureReader.h"
+#include "esp_log.h"
+
+const char TAG[] = "TEMP_SENSOR";
 
 extern const int bufferSize;
 extern char payload_buffer[];
@@ -13,40 +16,52 @@ TemperatureReader::~TemperatureReader()
 
 void TemperatureReader::begin()
 {
-    dht.setup(DHTPIN, DHTesp::DHT22); // Connect DHT 
+    dht.setup(DHTPIN, DHTesp::DHT22); // Connect DHT
     Serial.println("TemperatureReader initialisé");
 }
 
-bool TemperatureReader::updateConfig(char *configJson)
+bool TemperatureReader::updateConfig(char *json)
 {
-    bool doSave = false;
-    const char *pos;
+    bool changed = false;
+    ESP_LOGD(TAG, "Message:%s", json);
 
-    // Extraire ID sensor
-    pos = ConfigManager::jsonFindValue(configJson, "temp_sensor_id");
+    // 1. Extraction de l'ID spécifique
+    const char *pos = ConfigManager::jsonFindValue(json, "ID");
+    ESP_LOGD(TAG, "pos:%s", pos);
+
     if (pos)
     {
-        int idSensor = ConfigManager::jsonExtractInt(pos);
-        if (idSensor != config->getSensorId())
+        int id = ConfigManager::jsonExtractInt(pos);
+        ESP_LOGD(TAG, "ID:%d", id);
+
+        if (this->sensorId != id)
         {
-            config->setSensorId(idSensor);
-            doSave = true;
+            this->sensorId = id;
+            changed = true;
         }
     }
 
-    // Extraire sleep duration
-    pos = ConfigManager::jsonFindValue(configJson, "sleep_duration");
-    if (pos)
+    // 2. Extraction des attributs (ex: pins)
+    const char *attrPtr = ConfigManager::findArrayStart(json, "ATTS");
+    ESP_LOGD(TAG, "attrPtr:%s", attrPtr);
+    if (attrPtr != nullptr)
     {
-        int sleepPeriod = ConfigManager::jsonExtractInt(pos);
-        if (config->getSleepPeriod() != sleepPeriod)
+        char attrBuf[128];
+        while (attrPtr && (attrPtr = ConfigManager::getNextObjectInArray(attrPtr, attrBuf, sizeof(attrBuf))))
         {
-            config->setSleepPeriod(sleepPeriod);
-            doSave = true;
+            char key[8];
+            int value = 0;
+            ConfigManager::jsonExtractString(ConfigManager::jsonFindValue(attrBuf, "KEY"), key, sizeof(key));
+            ESP_LOGD(TAG, "KEY:%s", key);
+            if (attrBuf)
+            {
+                value = ConfigManager::jsonExtractInt(ConfigManager::jsonFindValue(attrBuf, "VAL"));
+                ESP_LOGD(TAG, "value:%d", value);
+            }
         }
     }
 
-    return doSave;
+    return changed;
 }
 
 void TemperatureReader::executeJob()
@@ -54,8 +69,8 @@ void TemperatureReader::executeJob()
     Serial.println("\n------- TemperatureReader executeJob()");
 
     delay(dht.getMinimumSamplingPeriod());
-    float humidity = dht.getHumidity();
-    float temperature = dht.getTemperature();
+    //   float humidity = dht.getHumidity();
+    //   float temperature = dht.getTemperature();
     Serial.println(dht.getStatusString());
 
     // Reconnecter si nécessaire
@@ -66,16 +81,17 @@ void TemperatureReader::executeJob()
         network->subscribeToTopics();
     }
 
+    /*
     //{"DEV":{"ID":25,"V":2,"SN":0},"SS":{"ID":42,"TMP":{"T":225,"H":273}}}
-
     // DEV: Device ----
     // SS: Sensor data -- ID: sensorId -- V: version -- SN: sequenceNumber -- TMP: TemperatureData -- T:Temperature h:humidity
     snprintf(payload_buffer, bufferSize,
-             "{\"DEV\":{\"ID\":%d,\"V\":%d,\"SN\":%d},\"SS\":{\"ID\":%d,\"TMP\":{\"T\":%.1f,\"H\":%.1f}}}",
-             config->getDeviceId(), version, sequenceNumber,
-             config->getSensorId(), temperature * 10, humidity * 10);
+    "{\"DEV\":{\"ID\":%d,\"V\":%d,\"SN\":%d},\"SS\":{\"ID\":%d,\"TMP\":{\"T\":%.1f,\"H\":%.1f}}}",
+    config->getDeviceId(), version, sequenceNumber,
+    config->getSensorId(), temperature * 10, humidity * 10);
 
     network->publish(TopicType::DATA, payload_buffer);
+    */
 
     sequenceNumber++;
     Serial.println("\n------- Fin executeJob()-------------------");

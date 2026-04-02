@@ -24,10 +24,10 @@ public:
      * @param network Pointeur vers le NetworkManager (non possédé)
      * @param config Pointeur vers le ConfigManager (non possédé)
      */
-    void setup(NetworkManager *network, ConfigManager *config)
+    void setup(NetworkManager *network)
     {
         this->network = network;
-        this->config = config;
+        //  this->config = config;
     };
 
     // Méthodes purement virtuelles à implémenter
@@ -42,8 +42,9 @@ public:
 #endif
 
 protected:
+    int sensorId = 0;
     NetworkManager *network; // Pointeur non-possédé
-    ConfigManager *config;   // Pointeur non-possédé
+                             // ConfigManager *config;   // Pointeur non-possédé
 
     /**
      * @brief Vérifie la validité des pointeurs
@@ -51,7 +52,7 @@ protected:
      */
     bool isValid() const
     {
-        return network != nullptr && config != nullptr;
+        return network != nullptr; // && config != nullptr;
     }
 };
 

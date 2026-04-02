@@ -7,6 +7,17 @@
 #include "SleepManager.h"
 #include <Arduino.h>
 #include <memory>
+#include <vector>
+
+struct ConfigDevice
+{
+    int id_device = 0;
+    int id_sensor = 0;
+    int im_alive_period = 0;
+    int sleep_period = 60;
+    uint16_t counter = 0;
+    const char *version = "2.0";
+};
 
 /**
  * @brief Contrôleur principal du dispositif IoT
@@ -20,25 +31,44 @@
 class DeviceController
 {
 public:
-    DeviceController(Sensor *sensor);
+    DeviceController();
     ~DeviceController() = default;
 
     // Cycle de vie principal
     void initialize();
     void run();
     void shutdown();
+    bool update(char *configJson);
 
     // Accesseurs pour callbacks externes
     NetworkManager *getNetworkManager() { return network.get(); }
-    ConfigManager *getConfigManager() { return &config; }
-    //  Sensor *getSensor() { return sensor->get(); }
-    Sensor *getSensor() { return sensor; }
+    ConfigManager *getConfigManager() { return &configMgr; }
+    // TODO Sensor *getSensor() { return sensor; }
+    void executeSensorJob();
+
+    int getDeviceId() const { return configDevice.id_device; }
+    int getSleepPeriod() const { return configDevice.sleep_period; }
+    int getAlivePeriod() const { return configDevice.im_alive_period; }
+
+#ifdef DEBUG_MODE
+    void debugMode() {};
+#endif
+
+    // JSON parsing helpers
+    void jsonPrintConfig(char *buffer, int bufferSize)
+    {
+        snprintf(buffer, bufferSize,
+                 "{\"id_device\":%d, \"alive\":%d,\"sleep\":%d,\"version\":%s}",
+                 configDevice.id_device, configDevice.im_alive_period, configDevice.sleep_period, configDevice.version);
+    };
 
 private:
     // ===== Composants du système =====
-    Sensor *sensor;
+    //  Sensor *sensor;
+    std::vector<Sensor *> sensors;
 
-    ConfigManager config;
+    ConfigDevice configDevice;
+    ConfigManager configMgr;
     SleepManager sleepMgr;
 
     std::unique_ptr<NetworkManager> network;
@@ -48,6 +78,10 @@ private:
     char payloadBuffer[256];
 
     // ===== Méthodes privées =====
+    void addSensor(Sensor *sensor) { sensors.push_back(sensor); }
+    bool setConfig(char *configJson);
+    bool macVerify(char *configJson);
+
     void configureLED();
     void initializeNetwork();
     void initializeSensor();
@@ -58,7 +92,6 @@ private:
 
     void waitForDeviceId();
     void waitForMqttMessages();
-    void executeSensorJob();
 
     void publishStatus(const char *status);
     void publishStartMessage();

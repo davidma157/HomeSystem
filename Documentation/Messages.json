@@ -1,0 +1,19 @@
+
+
+{"DEV":{"ID":27,"V":2,"SN":0},"SS":{"ID":43,"TMP":{"T":220,"H":337}}}
+
+{"id_device":32,"mac":"58:8C:81:B0:D8:9C","location":null,"sleep_duration":0,"im_alive_period":0,
+     "sensors":[
+	    {"id_sensor":51,"sensor_role":"TEMPERATURE",
+			"attributs":[{"id_attribut":108,"name":"pin","value":11}]},
+		{"id_sensor":52,"sensor_role":"VALVE","attributs":[]}]}
+
+
+{"DEV":{"ID":27,"MAC":"58:8C:81:B0:D8:9C","SLEEP":0,"ALIVE":0} ,
+     "SS":[
+	    {"ID":51,"ROLE":"TEMPERATURE",
+			"ATT":[{"ID":108,"N":"pin","VAL":11}]},
+		{"ID":52,"ROLE":"VALVE","ATT":[]}]}
+
+
+

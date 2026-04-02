@@ -3,8 +3,8 @@
 extern const int bufferSize;
 extern char payload_buffer[];
 
-HomeDebug::HomeDebug(NetworkManager *network, ConfigManager *config, Sensor *sensor)
-    : network(network), config(config), sensor(sensor)
+HomeDebug::HomeDebug(NetworkManager *network, DeviceController *deviceCtrl)
+    : network(network), deviceCtrl(deviceCtrl)
 {
     currentTime = millis();
     connectNetwork();
@@ -25,38 +25,36 @@ void HomeDebug::connectNetwork()
 
 void HomeDebug::simulSleepPeriod()
 {
-    if (config->getSleepPeriod() > 0)
+    if (deviceCtrl->getSleepPeriod() > 0)
     {
-        if (currentTime - lastCheckSleep >= config->getSleepPeriod() * 1000)
+        if (currentTime - lastCheckSleep >= deviceCtrl->getSleepPeriod() * 1000)
         {
             lastCheckSleep = currentTime;
-            sensor->executeJob();
-            Serial.printf("SleepPeriod : Attente de %llu sec\n\n", config->getSleepPeriod());
+            deviceCtrl->executeSensorJob();
+            Serial.printf("SleepPeriod : Attente de %llu sec\n\n", deviceCtrl->getSleepPeriod());
         }
         else
         {
-#ifdef DEBUG_MODE
-            sensor->debugMode();
-#endif
+            deviceCtrl->debugMode();
         }
     }
 }
 void HomeDebug::simulAlivePeriod()
 {
-    if (config->getAlivePeriod() > 0)
+    if (deviceCtrl->getAlivePeriod() > 0)
     {
         // Simulation Cycle I'm Alive
-        if (currentTime - lastCheckAlive >= config->getAlivePeriod() * 1000)
+        if (currentTime - lastCheckAlive >= deviceCtrl->getAlivePeriod() * 1000)
         {
             lastCheckAlive = currentTime;
             Serial.println("\n--- Cycle I'm Alive ---");
 
             snprintf(payload_buffer, bufferSize,
-                     "{\"id_device\":\"%d\",\"status\":\"alive\",\"counter\":%d}",
-                     config->getDeviceId(), config->getCounter());
-            config->incrementCounter();
+                     "{\"id_device\":\"%d\",\"status\":\"alive\"}",
+                     deviceCtrl->getDeviceId());
+            // config->incrementCounter();
             network->publish(TopicType::STATUS, payload_buffer);
-            Serial.printf("AlivePeriod : Attente de %llu sec\n\n", config->getAlivePeriod());
+            Serial.printf("AlivePeriod : Attente de %llu sec\n\n", deviceCtrl->getAlivePeriod());
         }
     }
 }
@@ -69,7 +67,7 @@ void HomeDebug::printDot()
     {
         Serial.println(".");
         lgLine = 0;
-        config->jsonPrintConfig(payload_buffer, bufferSize);
+        deviceCtrl->jsonPrintConfig(payload_buffer, bufferSize);
         Serial.printf("\nConfig:%s\n", payload_buffer);
     }
 }

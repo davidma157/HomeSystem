@@ -1,14 +1,13 @@
 #ifndef HOME_DEBUG_H
 #define HOME_DEBUG_H
 
-#include <Arduino.h>
-#include "Sensor.h"
+#include "Devicecontroller.h"
 #include "NetworkManager.h"
-#include "ConfigManager.h"
+#include "Sensor.h"
+#include <Arduino.h>
 
-
-
-class HomeDebug {
+class HomeDebug
+{
 private:
     uint8_t lgLine = 0;
     uint8_t lgLineMax = 60;
@@ -16,10 +15,9 @@ private:
     unsigned long lastCheckSleep = 0;
     unsigned long currentTime = 0;
 
-
-    NetworkManager* network;
-    ConfigManager* config;
-    Sensor* sensor;
+    NetworkManager *network;
+    // ConfigManager *configMgr;
+    DeviceController *deviceCtrl;
 
     void connectNetwork();
     void simulSleepPeriod();
@@ -27,7 +25,7 @@ private:
     void printDot();
 
 public:
-    HomeDebug(NetworkManager* network, ConfigManager* config, Sensor* sensor);
+    HomeDebug(NetworkManager *network, DeviceController *deviceCtrl);
     void exec();
 };
 
