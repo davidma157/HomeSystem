@@ -1,4 +1,5 @@
 #include "NetworkManager.h"
+#define LOG_LOCAL_LEVEL ESP_LOG_WARN
 #include "esp_log.h"
 
 const char TAG[] = "NETWORK_MGR";

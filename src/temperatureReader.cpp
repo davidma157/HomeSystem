@@ -22,6 +22,7 @@ void TemperatureReader::begin()
 
 bool TemperatureReader::updateConfig(char *json)
 {
+    /*
     bool changed = false;
     ESP_LOGD(TAG, "Message:%s", json);
 
@@ -60,8 +61,9 @@ bool TemperatureReader::updateConfig(char *json)
             }
         }
     }
+    */
 
-    return changed;
+    return false;
 }
 
 void TemperatureReader::executeJob()

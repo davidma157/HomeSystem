@@ -7,17 +7,6 @@
 #include "SleepManager.h"
 #include <Arduino.h>
 #include <memory>
-#include <vector>
-
-struct ConfigDevice
-{
-    int id_device = 0;
-    int id_sensor = 0;
-    int im_alive_period = 0;
-    int sleep_period = 60;
-    uint16_t counter = 0;
-    const char *version = "2.0";
-};
 
 /**
  * @brief Contrôleur principal du dispositif IoT
@@ -46,30 +35,20 @@ public:
     // TODO Sensor *getSensor() { return sensor; }
     void executeSensorJob();
 
-    int getDeviceId() const { return configDevice.id_device; }
-    int getSleepPeriod() const { return configDevice.sleep_period; }
-    int getAlivePeriod() const { return configDevice.im_alive_period; }
+    int getDeviceId() const { return deviceConfig->id_device; }
+    int getSleepPeriod() const { return deviceConfig->sleep_period; }
+    int getAlivePeriod() const { return deviceConfig->im_alive_period; }
 
 #ifdef DEBUG_MODE
     void debugMode() {};
 #endif
 
-    // JSON parsing helpers
-    void jsonPrintConfig(char *buffer, int bufferSize)
-    {
-        snprintf(buffer, bufferSize,
-                 "{\"id_device\":%d, \"alive\":%d,\"sleep\":%d,\"version\":%s}",
-                 configDevice.id_device, configDevice.im_alive_period, configDevice.sleep_period, configDevice.version);
-    };
-
 private:
     // ===== Composants du système =====
-    //  Sensor *sensor;
-    std::vector<Sensor *> sensors;
-
-    ConfigDevice configDevice;
+    DeviceConfig *deviceConfig;
     ConfigManager configMgr;
     SleepManager sleepMgr;
+    bool configInitialized = false;
 
     std::unique_ptr<NetworkManager> network;
 
@@ -78,8 +57,9 @@ private:
     char payloadBuffer[256];
 
     // ===== Méthodes privées =====
-    void addSensor(Sensor *sensor) { sensors.push_back(sensor); }
-    bool setConfig(char *configJson);
+    // TODO -- addSensor
+    void addSensor() {};
+    bool extractConfig(char *configJson);
     bool macVerify(char *configJson);
 
     void configureLED();
