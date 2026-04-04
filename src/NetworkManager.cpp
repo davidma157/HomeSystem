@@ -155,7 +155,7 @@ void NetworkManager::calibrateOptimalPower()
  */
 bool NetworkManager::connectWithPowerSweep()
 {
-    Serial.println("[Sweep] Balayage des puissances du max vers le min...");
+    ESP_LOGD(TAG, "[Sweep] Balayage des puissances du max vers le min...");
 
     // Construire la liste de puissances décroissante
     const wifi_power_t levels[] = {
@@ -179,7 +179,7 @@ bool NetworkManager::connectWithPowerSweep()
 
         if (!tryConnectAtCurrentPower())
         {
-            Serial.println("[Sweep] Connexion échouée à ce niveau, on continue...");
+            ESP_LOGE(TAG, "[Sweep] Connexion échouée à ce niveau, on continue...");
             continue;
         }
 
@@ -191,7 +191,7 @@ bool NetworkManager::connectWithPowerSweep()
         if (rssi >= RSSI_POOR)
         {
             // Signal acceptable ; affiner vers le bas pour trouver l'optimum
-            Serial.println("[Sweep] Signal acceptable, lancement de la calibration.");
+            ESP_LOGD(TAG, "[Sweep] Signal acceptable, lancement de la calibration.");
             calibrateOptimalPower();
             return true;
         }
@@ -202,7 +202,7 @@ bool NetworkManager::connectWithPowerSweep()
             // On conserve quand même la connexion si c'est le mieux possible.
             if (i == 0)
             {
-                Serial.println("[Sweep] Puissance maximale atteinte, signal faible mais connexion conservée.");
+                ESP_LOGD(TAG, "[Sweep] Puissance maximale atteinte, signal faible mais connexion conservée.");
                 optimalPowerLevel = levels[0];
                 optimalPowerFound = true;
                 return true;
@@ -213,7 +213,7 @@ bool NetworkManager::connectWithPowerSweep()
         }
     }
 
-    Serial.println("[Sweep] Aucune connexion trouvée après balayage complet.");
+    ESP_LOGD(TAG, "[Sweep] Aucune connexion trouvée après balayage complet.");
     return false;
 }
 
@@ -242,20 +242,20 @@ void NetworkManager::connectWiFi()
             // La puissance mémorisée reste valide si le signal est encore bon.
             if (rssi >= RSSI_GOOD)
             {
-                Serial.println("[connectWiFi] Qualité suffisante, pas de recalibration.");
+                ESP_LOGD(TAG, "[connectWiFi] Qualité suffisante, pas de recalibration.");
                 afficherQualiteSignal();
                 return;
             }
 
             // Signal dégradé depuis la dernière fois → recalibrer
-            Serial.println("[connectWiFi] Signal dégradé, recalibration en cours...");
+            ESP_LOGD(TAG, "[connectWiFi] Signal dégradé, recalibration en cours...");
             calibrateOptimalPower();
             afficherQualiteSignal();
             return;
         }
 
         // La puissance mémorisée ne permet plus de se connecter → sweep complet
-        Serial.println("[connectWiFi] Connexion échouée avec la puissance mémorisée, balayage complet.");
+        ESP_LOGD(TAG, "[connectWiFi] Connexion échouée avec la puissance mémorisée, balayage complet.");
     }
 
     // ── 2. Première connexion (ou puissance mémorisée devenue inopérante) ────
@@ -270,13 +270,13 @@ void NetworkManager::connectWiFi()
         if (q.rssi >= RSSI_GOOD)
         {
             // Signal déjà bon à faible puissance : chercher le minimum optimal.
-            Serial.println("[connectWiFi] Bon signal, calibration de la puissance optimale.");
+            ESP_LOGD(TAG, "[connectWiFi] Bon signal, calibration de la puissance optimale.");
             calibrateOptimalPower();
         }
         else
         {
             // Signal insuffisant même à 2 dBm → chercher une puissance plus haute.
-            Serial.println("[connectWiFi] Signal insuffisant à faible puissance, calibration vers le haut.");
+            ESP_LOGD(TAG, "[connectWiFi] Signal insuffisant à faible puissance, calibration vers le haut.");
             // Monter jusqu'à obtenir RSSI_GOOD
             while (q.rssi < RSSI_GOOD)
             {
@@ -300,10 +300,10 @@ void NetworkManager::connectWiFi()
     }
 
     // ── 3. Connexion initiale échouée → balayage du max vers le min ──────────
-    Serial.println("[connectWiFi] Connexion initiale échouée, balayage de puissance.");
+    ESP_LOGE(TAG, "[connectWiFi] Connexion initiale échouée, balayage de puissance.");
     if (!connectWithPowerSweep())
     {
-        Serial.println("[connectWiFi] ERREUR : Impossible de se connecter au WiFi.");
+        ESP_LOGE(TAG, "[connectWiFi] ERREUR : Impossible de se connecter au WiFi.");
         return;
     }
 
@@ -324,7 +324,7 @@ void NetworkManager::disconnectWiFi()
         while (WiFi.status() == WL_CONNECTED && millis() - startTime < 2000)
             delay(50);
 
-        Serial.println("WiFi déconnecté");
+        ESP_LOGE(TAG, "WiFi déconnecté");
     }
 }
 
@@ -384,7 +384,7 @@ void NetworkManager::disconnectMqtt()
     {
         client.disconnect();
         delay(500);
-        Serial.println("MQTT déconnecté");
+        ESP_LOGE(TAG, "MQTT déconnecté");
     }
 }
 
@@ -446,7 +446,7 @@ bool NetworkManager::subscribeToTopics()
 void NetworkManager::setLowPowerMode()
 {
     setWiFiPower(WIFI_POWER_2dBm);
-    Serial.println("WiFi: Mode basse consommation");
+    ESP_LOGD(TAG, "WiFi: Mode basse consommation");
 }
 
 void NetworkManager::setHighPowerMode()

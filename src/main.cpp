@@ -1,7 +1,8 @@
 #include "ConfigManager.h"
 #include "DeviceController.h"
-#include "Sensor.h"
-#include "TemperatureReader.h"
+#include "esp_log.h"
+
+const char TAG[] = "MAIN";
 
 #ifdef DEBUG_MODE
 #include "HomeDebug.h"
@@ -13,7 +14,6 @@ char payload_buffer[bufferSize];
 
 // ============= OBJETS GLOBAUX =============
 std::unique_ptr<DeviceController> deviceCtrl;
-std::unique_ptr<TemperatureReader> sensor;
 
 #ifdef DEBUG_MODE
 std::unique_ptr<HomeDebug> homeDebug;
@@ -35,11 +35,11 @@ public:
     {
         if (!instance)
         {
-            Serial.println("ERREUR: Controller non initialisé dans callback");
+            ESP_LOGE(TAG, "ERREUR: Controller non initialisé dans callback");
             return;
         }
 
-        Serial.println("\n------- MQTT Message Reçu -----");
+        ESP_LOGD(TAG, "\n------- MQTT Message Reçu -----");
 
         // Copier le payload dans un buffer sécurisé
         int msgLength = 512;
@@ -47,17 +47,16 @@ public:
         if (length > msgLength)
         {
             // TODO - Publier un message.
-            Serial.println("Message reçu dépasse la longueur du buffer.");
-            Serial.printf("Topic: %s\nMessage: %s\n", topic, message);
-            Serial.println("-----------------------------");
+            ESP_LOGE(TAG, "Message reçu dépasse la longueur du buffer.");
+            ESP_LOGE(TAG, "Topic: %s\nMessage: %s\n", topic, message);
         }
 
         size_t copyLength = (length >= sizeof(message)) ? sizeof(message) - 1 : length;
         memcpy(message, payload, copyLength);
         message[copyLength] = '\0';
 
-        Serial.printf("Topic: %s\nMessage: %s\n", topic, message);
-        Serial.println("-----------------------------");
+        ESP_LOGD(TAG, "Topic: %s\nMessage: %s\n", topic, message);
+        ESP_LOGD(TAG, "-----------------------------");
 
         // Dispatcher les commandes
         if (strstr(topic, "config") != nullptr)
@@ -82,7 +81,7 @@ private:
 
     static void handleConfigUpdate(char *configJson)
     {
-        Serial.println("→ Mise à jour configuration");
+        ESP_LOGD(TAG, "→ Mise à jour configuration");
 
         NetworkManager *network = instance->getNetworkManager();
         ConfigManager *config = instance->getConfigManager();
@@ -90,7 +89,7 @@ private:
 
         if (!network || !config)
         {
-            Serial.println("✗ Composants non disponibles");
+            ESP_LOGD(TAG, "✗ Composants non disponibles");
             return;
         }
 
@@ -102,8 +101,8 @@ private:
         {
             config->save();
             instance->jsonPrintConfig(payload_buffer, bufferSize);
-            Serial.println("✓ Configuration mise à jour:");
-            Serial.println(payload_buffer);
+            ESP_LOGD(TAG,"✓ Configuration mise à jour:");
+            ESP_LOGD(TAG,payload_buffer);
 
             network->publish(TopicType::CFG, payload_buffer);
         }
@@ -112,14 +111,14 @@ private:
 
     static void handleRestart()
     {
-        Serial.println("→ Commande de redémarrage reçue");
+        ESP_LOGD(TAG, "→ Commande de redémarrage reçue");
         delay(500);
         ESP.restart();
     }
 
     static void handleMacRequest()
     {
-        Serial.println("→ Demande MAC/IP");
+        ESP_LOGD(TAG, "→ Demande MAC/IP");
 
         NetworkManager *network = instance->getNetworkManager();
         ConfigManager *config = instance->getConfigManager();
@@ -133,7 +132,7 @@ private:
                      network->getMacAddress());
 
             network->publish(TopicType::MAC_IP, payload_buffer);
-            Serial.println("✓ MAC/IP envoyé");
+            ESP_LOGD(TAG, "✓ MAC/IP envoyé");
         }
     }
 };
@@ -159,7 +158,7 @@ void setup()
         sensor = std::make_unique<TemperatureReader>();
         if (!sensor)
         {
-            Serial.println("ERREUR: Allocation Sensor échouée");
+            ESP_LOGE(TAG,"ERREUR: Allocation Sensor échouée");
             ESP.restart();
         }
         deviceCtrl = std::make_unique<DeviceController>(sensor.get());
@@ -181,13 +180,13 @@ void setup()
     }
     catch (const std::exception &e)
     {
-        Serial.printf("EXCEPTION CRITIQUE: %s\n", e.what());
+        ESP_LOGD(TAG, "EXCEPTION CRITIQUE: %s\n", e.what());
         delay(1000);
         ESP.restart();
     }
     catch (...)
     {
-        Serial.println("ERREUR CRITIQUE INCONNUE");
+        ESP_LOGE(TAG, "ERREUR CRITIQUE INCONNUE");
         delay(1000);
         ESP.restart();
     }
@@ -200,16 +199,16 @@ void loop()
     // Mode debug: simulation sans deep sleep
     if (!homeDebug && deviceCtrl)
     {
-        Serial.println("\n========================================");
-        Serial.println("Initialisation HomeDebug");
-        Serial.println("========================================");
+        ESP_LOGD(TAG, "\n========================================");
+        ESP_LOGD(TAG, "Initialisation HomeDebug");
+        ESP_LOGD(TAG, "========================================");
 
         homeDebug = std::make_unique<HomeDebug>(
             deviceCtrl->getNetworkManager(),
             deviceCtrl.get());
 
         // controller->jsonPrintConfig(payload_buffer, bufferSize);
-        // Serial.printf("Configuration: %s\n", payload_buffer);
+        // ESP_LOGD(TAG,"Configuration: %s\n", payload_buffer);
     }
 
     if (homeDebug)

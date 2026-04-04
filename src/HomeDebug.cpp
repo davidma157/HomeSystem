@@ -31,7 +31,7 @@ void HomeDebug::simulSleepPeriod()
         {
             lastCheckSleep = currentTime;
             deviceCtrl->executeSensorJob();
-            Serial.printf("SleepPeriod : Attente de %llu sec\n\n", deviceCtrl->getSleepPeriod());
+            ESP_LOGD(TAG, "SleepPeriod : Attente de %llu sec\n\n", deviceCtrl->getSleepPeriod());
         }
         else
         {
@@ -47,14 +47,14 @@ void HomeDebug::simulAlivePeriod()
         if (currentTime - lastCheckAlive >= deviceCtrl->getAlivePeriod() * 1000)
         {
             lastCheckAlive = currentTime;
-            Serial.println("\n--- Cycle I'm Alive ---");
+            ESP_LOGD(TAG, "\n--- Cycle I'm Alive ---");
 
             snprintf(payload_buffer, bufferSize,
                      "{\"id_device\":\"%d\",\"status\":\"alive\"}",
                      deviceCtrl->getDeviceId());
             // config->incrementCounter();
             network->publish(TopicType::STATUS, payload_buffer);
-            Serial.printf("AlivePeriod : Attente de %llu sec\n\n", deviceCtrl->getAlivePeriod());
+            ESP_LOGD(TAG, "AlivePeriod : Attente de %llu sec\n\n", deviceCtrl->getAlivePeriod());
         }
     }
 }
@@ -67,8 +67,6 @@ void HomeDebug::printDot()
     {
         Serial.println(".");
         lgLine = 0;
-        deviceCtrl->jsonPrintConfig(payload_buffer, bufferSize);
-        Serial.printf("\nConfig:%s\n", payload_buffer);
     }
 }
 

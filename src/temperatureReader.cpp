@@ -68,7 +68,7 @@ bool TemperatureReader::updateConfig(char *json)
 
 void TemperatureReader::executeJob()
 {
-    Serial.println("\n------- TemperatureReader executeJob()");
+    ESP_LOGD(TAG, "\n------- TemperatureReader executeJob()");
 
     delay(dht.getMinimumSamplingPeriod());
     //   float humidity = dht.getHumidity();
@@ -96,5 +96,4 @@ void TemperatureReader::executeJob()
     */
 
     sequenceNumber++;
-    Serial.println("\n------- Fin executeJob()-------------------");
 }
