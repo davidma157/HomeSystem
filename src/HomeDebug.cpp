@@ -1,4 +1,7 @@
 #include "HomeDebug.h"
+#include "esp_log.h"
+
+const char TAG[] = "HomeDebug";
 
 extern const int bufferSize;
 extern char payload_buffer[];

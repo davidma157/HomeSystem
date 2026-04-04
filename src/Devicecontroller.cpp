@@ -126,7 +126,6 @@ bool DeviceController::update(char *configJson)
     {
         ConfigManager::save(configJson);
 
-        char buffer[100];
         configMgr.printConfig();
         ESP_LOGI(TAG, "✓ Configuration mise à jour:");
 
