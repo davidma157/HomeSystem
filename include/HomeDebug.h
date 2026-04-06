@@ -15,6 +15,7 @@ private:
     unsigned long lastCheckSleep = 0;
     unsigned long currentTime = 0;
 
+    bool noSleepMsgSent = false;
     NetworkManager *network;
     // ConfigManager *configMgr;
     DeviceController *deviceCtrl;

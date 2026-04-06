@@ -3,11 +3,13 @@
 const char TAG[] = "CONFIG_MGR";
 
 // Stockage en mémoire RTC
-RTC_DATA_ATTR DeviceConfig rtcConfig;
+// RTC_DATA_ATTR DeviceConfig rtcConfig;
 RTC_DATA_ATTR bool rtcConfigValid = false;
 
 Preferences ConfigManager::preferences;
 
+/*
+//TODO ménage
 void ConfigManager::load()
 {
     int bufferSize = 256;
@@ -29,7 +31,10 @@ void ConfigManager::load()
         }
         preferences.end();
 
+        // TODO - Déplacer lors de la réception d'une nouvelle configuration.
+        // TODO Pour la durée du développement
         ConfigManager::extractConfig(buffer);
+        ConfigManager::save(&rtcConfig);
     }
 }
 
@@ -44,6 +49,35 @@ void ConfigManager::save(char *json)
     preferences.end();
     ESP_LOGD(TAG, "Configuration sauvegardée");
 }
+*/
+
+bool ConfigManager::loadConfig(DeviceConfig *config)
+{
+    preferences.begin("system", true);
+    size_t schLen = preferences.getBytesLength("config_bin");
+
+    if (schLen != sizeof(DeviceConfig))
+    {
+        ESP_LOGE(TAG, "Configuration invalide - N'a pas été chargée.");
+        preferences.end();
+        return false; // Configuration absente ou version différente
+    }
+
+    preferences.getBytes("config_bin", config, sizeof(DeviceConfig));
+    preferences.end();
+    return true;
+}
+
+void ConfigManager::save(DeviceConfig *config)
+{
+
+    preferences.begin("system", false);
+    // On sauvegarde toute la structure d'un coup comme un bloc de bytes
+    preferences.putBytes("config_bin", config, sizeof(DeviceConfig));
+    preferences.end();
+
+    ESP_LOGD(TAG, "Configuration sauvegardée");
+}
 
 void ConfigManager::reset()
 {
@@ -54,54 +88,38 @@ void ConfigManager::reset()
     ESP_LOGI(TAG, "Configuration réinitialisée");
 }
 
+/*
 DeviceConfig *ConfigManager::getConfig()
 {
     return &rtcConfig;
 }
+*/
 
-DeviceConfig *ConfigManager::extractConfig(char *configJson)
+void ConfigManager::extractConfig(char *configJson, DeviceConfig *config)
 {
-    bool needsSave = false;
-
-    // Extraire et mettre à jour l'ID device
-    // const char *pos = ConfigManager::jsonFindValue(configJson, "ID");
-    //  if (pos)
-    //   {
-    //  int idDevice = ConfigManager::jsonExtractInt(pos);
-    int idDevice = ConfigManager::jsonExtractInt(configJson, "ID");
-    if (rtcConfig.id_device == 0)
-    {
-        rtcConfig.id_device = idDevice;
-        needsSave = true;
-        ESP_LOGI(TAG, "✓ Nouveau ID device: %d\n", idDevice);
-    }
-
-    int sleepPeriod = ConfigManager::jsonExtractInt(configJson, "SLEEP");
-    if (rtcConfig.sleep_period != sleepPeriod)
-    {
-        rtcConfig.sleep_period = sleepPeriod;
-        needsSave = true;
-    }
-
-    int alivePeriod = ConfigManager::jsonExtractInt(configJson, "ALIVE");
-    if (rtcConfig.im_alive_period != alivePeriod)
-    {
-        rtcConfig.im_alive_period = alivePeriod;
-        needsSave = true;
-    }
-    //   }
+    config->id_device = ConfigManager::jsonExtractInt(configJson, "ID");
+    ConfigManager::jsonExtractString(configJson, "MAC", config->mac, sizeof(config->mac));
+    config->sleep_period = ConfigManager::jsonExtractInt(configJson, "SLEEP");
+    config->im_alive_period = ConfigManager::jsonExtractInt(configJson, "ALIVE");
 
     const char *arrayPtr = ConfigManager::findArrayStart(configJson, "SS");
     if (arrayPtr != nullptr)
     {
-        char sensorJson[256];
+        char sensorJson[512];
         int8_t indxSensor = 0;
+        config->num_sensors = 0;
         ESP_LOGV(TAG, "%s", arrayPtr);
         while (arrayPtr && (arrayPtr = ConfigManager::getNextObjectInArray(arrayPtr, sensorJson, sizeof(sensorJson))))
         {
-            SensorData *sensorData = &(rtcConfig.sensors[indxSensor]);
-            rtcConfig.num_sensors = indxSensor + 1;
+            SensorData *sensorData = &(config->sensors[indxSensor]);
+            config->num_sensors = indxSensor + 1;
             indxSensor++;
+            if (indxSensor == MAX_SENSORS)
+            {
+                ESP_LOGE(TAG, "Nombre de sensors(%d) dépasse la limite(%d)", config->num_sensors, MAX_SENSORS);
+                return;
+            }
+
             ESP_LOGV(TAG, "SensorJson:%s", sensorJson);
 
             int id = ConfigManager::jsonExtractInt(sensorJson, "ID");
@@ -109,6 +127,7 @@ DeviceConfig *ConfigManager::extractConfig(char *configJson)
             sensorData->id_sensor = id;
 
             sensorData->role = ConfigManager::getRole(sensorJson);
+            sensorData->num_attributes = 0;
 
             // 2. Extraction des attributs (ex: pins)
             const char *attrPtr = ConfigManager::findArrayStart(sensorJson, "ATTS");
@@ -119,8 +138,14 @@ DeviceConfig *ConfigManager::extractConfig(char *configJson)
                 uint8_t indxAttr = 0;
                 while (attrPtr && (attrPtr = ConfigManager::getNextObjectInArray(attrPtr, attrBuf, sizeof(attrBuf))))
                 {
+                    ESP_LOGV(TAG, "attrPtr:%s", attrPtr);
                     AttributeData *data = &sensorData->attributes[indxAttr];
                     sensorData->num_attributes = indxAttr + 1;
+                    if (sensorData->num_attributes == MAX_ATTRIBUTES)
+                    {
+                        ESP_LOGE(TAG, "Nombre d'attributs(%d) dépasse la limite(%d)", sensorData->num_attributes, MAX_ATTRIBUTES);
+                        return;
+                    }
                     indxAttr++;
                     char key[8];
                     ConfigManager::jsonExtractString(attrBuf, "KEY", key, sizeof(key));
@@ -135,12 +160,8 @@ DeviceConfig *ConfigManager::extractConfig(char *configJson)
             }
         }
     }
-    if (needsSave)
-    {
-        /* code */
-    }
-    ConfigManager::printConfig();
-    return &rtcConfig;
+    ESP_LOGV(TAG, "Terminé");
+    config->initialized = true;
 }
 
 const char *ConfigManager::jsonFindValue(const char *json, const char *key)
@@ -185,7 +206,7 @@ int ConfigManager::jsonExtractInt(const char *json, const char *key)
     {
         while (*pos == ' ' || *pos == '\t')
             pos++;
-        ESP_LOGV(TAG, "Int-->%s", pos);
+
         return atoi(pos);
     }
     return 0;
@@ -241,18 +262,22 @@ SensorRole ConfigManager::getRole(char *sensorJson)
     return SensorRole::UNDEFINED;
 }
 
-void ConfigManager::printConfig()
+void ConfigManager::printConfig(DeviceConfig *config)
 {
     int bufferSize = 512;
     char buffer[bufferSize];
     char *indxBuffer = buffer;
 
-    indxBuffer += snprintf(indxBuffer, bufferSize, "\n\tDEV(ID:%d, Sensors(%d))", rtcConfig.id_device, rtcConfig.num_sensors);
+    indxBuffer += snprintf(indxBuffer, bufferSize, "\n\tInitialisé:%d\n\tDEV(ID:%d, MAC:%s, Sleep:%d, Alive:%d, Sensors(%d))",
+                           config->initialized, config->id_device, config->mac,
+                           config->sleep_period, config->im_alive_period,
+                           config->num_sensors);
     bufferSize -= strlen(buffer);
 
-    for (size_t i = 0; i < rtcConfig.num_sensors; i++)
+    for (size_t i = 0; i < config->num_sensors; i++)
     {
-        SensorData *sd = &rtcConfig.sensors[i];
+        char *sensorIndex = indxBuffer;
+        SensorData *sd = &config->sensors[i];
 
         indxBuffer += snprintf(indxBuffer, bufferSize, "\n\t\tSensor(ID:%d, Role:%d, Attr(%d))", sd->id_sensor, sd->role, sd->num_attributes);
         bufferSize -= strlen(buffer);
@@ -263,7 +288,13 @@ void ConfigManager::printConfig()
             indxBuffer += snprintf(indxBuffer, bufferSize, "\n\t\t\tAttr:(Key:%s, Value:%d)", ad->key, ad->value);
             bufferSize -= strlen(buffer);
         }
+        //      ESP_LOGI(TAG, "%s", sensorIndex);
     }
 
     ESP_LOGI(TAG, "%s", buffer);
+}
+
+void ConfigManager::getMac(char *configJson, char *dest, int destLen)
+{
+    ConfigManager::jsonExtractString(configJson, "MAC", dest, destLen);
 }

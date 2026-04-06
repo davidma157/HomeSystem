@@ -31,8 +31,8 @@ void SleepManager::configureLowPowerMode()
     }
     else
     {
-        ESP_LOGE(TAG, "Erreur configuration power management: %d\n", result);
-        ESP_LOGD(TAG, "Normal en mode DEBUG\n");
+        ESP_LOGE(TAG, "Erreur configuration power management: %d", result);
+        ESP_LOGD(TAG, "Normal en mode DEBUG");
     }
 }
 

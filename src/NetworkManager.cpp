@@ -50,7 +50,9 @@ void NetworkManager::setTimeouts(uint32_t wifiTimeout, uint32_t mqttTimeout)
 }
 
 [[deprecated]]
-void NetworkManager::setTopicParameters(int idDevice)
+
+// TODO À revoir
+void NetworkManager::setTopicIdentifiant(int idDevice)
 {
     this->idDevice = idDevice;
     snprintf(identifiant, sizeof(identifiant), "ID-%d", idDevice);
@@ -105,7 +107,7 @@ bool NetworkManager::tryConnectAtCurrentPower()
  */
 void NetworkManager::calibrateOptimalPower()
 {
-    ESP_LOGD(TAG, "%s", "[Calibration] Recherche de la puissance minimale optimale...");
+    ESP_LOGD(TAG, "%s", "Recherche de la puissance minimale optimale...");
 
     wifi_power_t bestLevel = currentPowerLevel;
 
@@ -121,7 +123,7 @@ void NetworkManager::calibrateOptimalPower()
         delay(1500); // laisser le signal se stabiliser
 
         int rssi = getRSSI();
-        ESP_LOGD(TAG, "[Calibration] %s → RSSI %d dBm\n",
+        ESP_LOGD(TAG, "[Calibration] %s → RSSI %d dBm",
                  getPowerLevelName(candidate), rssi);
 
         if (rssi >= RSSI_GOOD)
@@ -132,7 +134,7 @@ void NetworkManager::calibrateOptimalPower()
         else
         {
             // Trop faible : revenir au cran précédent et s'arrêter
-            ESP_LOGD(TAG, "[Calibration] RSSI insuffisant, niveau retenu : %s\n",
+            ESP_LOGD(TAG, "[Calibration] RSSI insuffisant, niveau retenu : %s",
                      getPowerLevelName(bestLevel));
             setWiFiPower(bestLevel);
             break;
@@ -142,7 +144,7 @@ void NetworkManager::calibrateOptimalPower()
     optimalPowerLevel = currentPowerLevel;
     optimalPowerFound = true;
 
-    ESP_LOGD(TAG, "[Calibration] Puissance optimale : %s\n",
+    ESP_LOGD(TAG, "Puissance optimale : %s\n",
              getPowerLevelName(optimalPowerLevel));
 }
 
@@ -222,7 +224,7 @@ bool NetworkManager::connectWithPowerSweep()
 
 void NetworkManager::connectWiFi()
 {
-    ESP_LOGD(TAG, "Connexion à WiFi: %s\n", wifi_ssid);
+    ESP_LOGD(TAG, "Connexion à WiFi: %s", wifi_ssid);
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(false);
 
@@ -236,7 +238,7 @@ void NetworkManager::connectWiFi()
         if (tryConnectAtCurrentPower())
         {
             int rssi = getRSSI();
-            ESP_LOGD(TAG, "[connectWiFi] Connecté avec la puissance mémorisée. RSSI = %d dBm\n", rssi);
+            ESP_LOGD(TAG, "[connectWiFi] Connecté avec la puissance mémorisée. RSSI = %d dBm", rssi);
 
             // La puissance mémorisée reste valide si le signal est encore bon.
             if (rssi >= RSSI_GOOD)
@@ -263,19 +265,19 @@ void NetworkManager::connectWiFi()
 
     if (tryConnectAtCurrentPower())
     {
-        ESP_LOGD(TAG, "[connectWiFi] Connecté à puissance basse. RSSI = %d dBm\n", getRSSI());
+        ESP_LOGD(TAG, "Connecté à puissance basse. RSSI = %d dBm", getRSSI());
 
         WiFiQuality q = getWiFiQuality();
         if (q.rssi >= RSSI_GOOD)
         {
             // Signal déjà bon à faible puissance : chercher le minimum optimal.
-            ESP_LOGD(TAG, "[connectWiFi] Bon signal, calibration de la puissance optimale.");
+            ESP_LOGD(TAG, "Bon signal, calibration de la puissance optimale.");
             calibrateOptimalPower();
         }
         else
         {
             // Signal insuffisant même à 2 dBm → chercher une puissance plus haute.
-            ESP_LOGD(TAG, "[connectWiFi] Signal insuffisant à faible puissance, calibration vers le haut.");
+            ESP_LOGD(TAG, "Signal insuffisant à faible puissance, calibration vers le haut.");
             // Monter jusqu'à obtenir RSSI_GOOD
             while (q.rssi < RSSI_GOOD)
             {
@@ -352,7 +354,7 @@ const char *NetworkManager::getMacAddress()
 void NetworkManager::connectMQTT()
 {
     client.setServer(mqtt_server, mqtt_port);
-    ESP_LOGD(TAG, "Tentative connexion MQTT:ID:%s - %s:%d\n", identifiant, mqtt_server, mqtt_port);
+    ESP_LOGD(TAG, "Tentative connexion MQTT:Identifiant:%s - %s:%d", identifiant, mqtt_server, mqtt_port);
 
     uint32_t startTime = millis();
 
@@ -374,7 +376,10 @@ void NetworkManager::connectMQTT()
 
 bool NetworkManager::isMQTTConnected()
 {
-    return client.connected();
+    bool connected = client.connected();
+    ESP_LOGD(TAG, "Statut:%d", connected);
+
+    return connected;
 }
 
 void NetworkManager::disconnectMqtt()
@@ -410,12 +415,12 @@ bool NetworkManager::publish(TopicType topicType, const char *payload)
 
     if (client.publish(topic, payload))
     {
-        ESP_LOGD(TAG, "Message publié [%s]: %s\n", topic, payload);
+        ESP_LOGD(TAG, "[%s]: %s", topic, payload);
         return true;
     }
     else
     {
-        ESP_LOGE(TAG, "Échec publication [%s]\n", topic);
+        ESP_LOGE(TAG, "Échec publication [%s]", topic);
         return false;
     }
 }
@@ -423,12 +428,12 @@ bool NetworkManager::publish(TopicType topicType, const char *payload)
 bool NetworkManager::subscribeToTopics()
 {
     char topic_receiver[64];
-    snprintf(topic_receiver, sizeof(topic_receiver), "home/to-dev/ID-%d/#",
+    snprintf(topic_receiver, sizeof(topic_receiver), TOPIC_TEMPLATE_SUBSCRIBE, // "home/to-sensor/ID-%d/#",
              this->idDevice);
 
     if (client.subscribe(topic_receiver, 1))
     {
-        ESP_LOGD(TAG, "Abonné à : %s\n", topic_receiver);
+        ESP_LOGD(TAG, "%s", topic_receiver);
         return true;
     }
     else
@@ -458,7 +463,7 @@ void NetworkManager::setWiFiPower(wifi_power_t power)
 {
     currentPowerLevel = power;
     WiFi.setTxPower(power);
-    ESP_LOGI(TAG, "Puissance WiFi réglée : %s\n", getPowerLevelName(power));
+    ESP_LOGI(TAG, "Puissance WiFi réglée : %s", getPowerLevelName(power));
 }
 
 wifi_power_t NetworkManager::getNextPowerLevel(wifi_power_t current)
@@ -685,10 +690,10 @@ void NetworkManager::afficherQualiteSignal()
 {
     WiFiQuality quality = getWiFiQuality();
 
-    ESP_LOGD(TAG, "%s", "═══════════════════════════════");
-    ESP_LOGD(TAG, "RSSI: %d dBm\n", quality.rssi);
-    ESP_LOGD(TAG, "Qualité: %s (%d%%)\n", quality.quality, quality.signalPercent);
-    ESP_LOGD(TAG, "Description: %s\n", quality.description);
-    ESP_LOGD(TAG, "Puissance TX: %s\n", getPowerLevelName(getCurrentPowerLevel()));
-    ESP_LOGD(TAG, "%s", "═══════════════════════════════");
+    ESP_LOGD(TAG, "%s", "═══════════════════════════════════");
+    ESP_LOGD(TAG, "RSSI: %d dBm", quality.rssi);
+    ESP_LOGD(TAG, "Qualité: %s (%d%%)", quality.quality, quality.signalPercent);
+    ESP_LOGD(TAG, "Description: %s", quality.description);
+    ESP_LOGD(TAG, "Puissance TX: %s", getPowerLevelName(getCurrentPowerLevel()));
+    ESP_LOGD(TAG, "%s", "═══════════════════════════════════\n");
 }

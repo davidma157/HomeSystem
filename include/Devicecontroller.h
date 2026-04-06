@@ -35,9 +35,9 @@ public:
     // TODO Sensor *getSensor() { return sensor; }
     void executeSensorJob();
 
-    int getDeviceId() const { return deviceConfig->id_device; }
-    int getSleepPeriod() const { return deviceConfig->sleep_period; }
-    int getAlivePeriod() const { return deviceConfig->im_alive_period; }
+    int getDeviceId() const { return deviceConfig.id_device; }
+    int getSleepPeriod() const { return deviceConfig.sleep_period; }
+    int getAlivePeriod() const { return deviceConfig.im_alive_period; }
 
 #ifdef DEBUG_MODE
     void debugMode() {};
@@ -45,10 +45,11 @@ public:
 
 private:
     // ===== Composants du système =====
-    DeviceConfig *deviceConfig;
     ConfigManager configMgr;
     SleepManager sleepMgr;
-    bool configInitialized = false;
+    DeviceConfig deviceConfig;
+    int nbSensors = 0;
+    Sensor *sensors[MAX_SENSORS];
 
     std::unique_ptr<NetworkManager> network;
 
@@ -64,7 +65,7 @@ private:
 
     void configureLED();
     void initializeNetwork();
-    void initializeSensor();
+    void initializeSensors();
 
     bool connectToWiFi();
     bool connectToMQTT();

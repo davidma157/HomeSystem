@@ -5,9 +5,8 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 
-#define TOPIC_TEMPLATE_PUBLISH "home/dev/ID-%d%s"
-
-// TODO - Delete #define TOPIC_TEMPLATE_TO_SUBSCRIBE "home/to-dev/ID-%d/#"
+#define TOPIC_TEMPLATE_PUBLISH "home/sensor/ID-%d%s"
+#define TOPIC_TEMPLATE_SUBSCRIBE "home/to-sensor/ID-%d/#"
 
 // Seuils RSSI pour évaluer la qualité du signal
 #define RSSI_EXCELLENT -50 // Signal excellent, pas besoin d'augmenter la puissance
@@ -60,7 +59,7 @@ private:
 
     // Topics
     int idDevice = 0;
-    char identifiant[15] = "ESP32";
+    char identifiant[15] = "SENSOR_0";
 
     // Callback
     void (*messageCallback)(char *, byte *, unsigned int);
@@ -147,7 +146,7 @@ public:
     bool mqttLoop();
 
     // ── Publishing ───────────────────────────────────────────────────────────
-    void setTopicParameters(int idDevice);
+    void setTopicIdentifiant(int idDevice);
     bool publish(TopicType topicDomain, const char *payload);
 
     // ── Subscription ─────────────────────────────────────────────────────────

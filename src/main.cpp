@@ -33,13 +33,12 @@ public:
 
     static void callback(char *topic, byte *payload, unsigned int length)
     {
+        ESP_LOGD(TAG, "══════════════ MQTT Message Reçu ══════════════");
         if (!instance)
         {
             ESP_LOGE(TAG, "ERREUR: Controller non initialisé dans callback");
             return;
         }
-
-        ESP_LOGD(TAG, "\n------- MQTT Message Reçu -----");
 
         // Copier le payload dans un buffer sécurisé
         int msgLength = 512;
@@ -55,8 +54,8 @@ public:
         memcpy(message, payload, copyLength);
         message[copyLength] = '\0';
 
-        ESP_LOGD(TAG, "Topic: %s\nMessage: %s\n", topic, message);
-        ESP_LOGD(TAG, "-----------------------------");
+        ESP_LOGD(TAG, "Topic: %s", topic);
+        ESP_LOGD(TAG, "Message: %s", message);
 
         // Dispatcher les commandes
         if (strstr(topic, "config") != nullptr)
@@ -85,7 +84,6 @@ private:
 
         NetworkManager *network = instance->getNetworkManager();
         ConfigManager *config = instance->getConfigManager();
-        // Sensor *sensor = instance->getSensor();
 
         if (!network || !config)
         {
@@ -93,7 +91,12 @@ private:
             return;
         }
 
-        instance->update(configJson);
+        bool needRestart = instance->update(configJson);
+        if (needRestart)
+        {
+            handleRestart();
+        }
+
         // Sauvegarder et publier si nécessaire
         /*
         //TODO -- Ménage
@@ -146,26 +149,14 @@ void setup()
     Serial.begin(115200);
     delay(3000); // Attendre stabilisation USB
 
-    Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║  ESP32-C3 Temperature Reader v2.0      ║");
-    Serial.println("║  Architecture refactorisée avec C++14  ║");
-    Serial.println("╚════════════════════════════════════════╝\n");
+    ESP_LOGD(TAG, "╔════════════════════════════════════════╗");
+    ESP_LOGD(TAG, "║  ESP32-C3 Temperature Reader v2.0      ║");
+    ESP_LOGD(TAG, "║  Architecture refactorisée avec C++14  ║");
+    ESP_LOGD(TAG, "╚════════════════════════════════════════╝\n");
 
     try
     {
-        // 1. Créer le contrôleur principal
-        /*
-        sensor = std::make_unique<TemperatureReader>();
-        if (!sensor)
-        {
-            ESP_LOGE(TAG,"ERREUR: Allocation Sensor échouée");
-            ESP.restart();
-        }
-        deviceCtrl = std::make_unique<DeviceController>(sensor.get());
-        */
-
         deviceCtrl = std::make_unique<DeviceController>();
-        // 2. Initialiser tous les composants
         deviceCtrl->initialize();
 
         // 3. Configurer le callback MQTT
@@ -199,7 +190,7 @@ void loop()
     // Mode debug: simulation sans deep sleep
     if (!homeDebug && deviceCtrl)
     {
-        ESP_LOGD(TAG, "\n========================================");
+        ESP_LOGD(TAG, "========================================");
         ESP_LOGD(TAG, "Initialisation HomeDebug");
         ESP_LOGD(TAG, "========================================");
 

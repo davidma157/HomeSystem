@@ -16,24 +16,16 @@ public:
     /**
      * @brief Constructeur
      */
-    Sensor() {};
-    virtual ~Sensor() = default;
-
-    /**
-     * @brief setup
-     * @param network Pointeur vers le NetworkManager (non possédé)
-     * @param config Pointeur vers le ConfigManager (non possédé)
-     */
-    void setup(NetworkManager *network)
+    Sensor(NetworkManager *network, int deviceId, SensorData *sd)
     {
         this->network = network;
-        //  this->config = config;
+        this->deviceId = deviceId;
     };
+    virtual ~Sensor() = default;
 
     // Méthodes purement virtuelles à implémenter
-    virtual void begin() = 0;
+    // virtual void setup(int deviceId, SensorData *sd) = 0;
     virtual void executeJob() = 0;
-    virtual bool updateConfig(char *messageJson) = 0;
     virtual const char *getTopicDomain() const = 0;
     virtual const char *getDescription() const = 0;
 
@@ -42,9 +34,10 @@ public:
 #endif
 
 protected:
+    int deviceId = 0;
     int sensorId = 0;
-    NetworkManager *network; // Pointeur non-possédé
-                             // ConfigManager *config;   // Pointeur non-possédé
+    NetworkManager *network = nullptr; // Pointeur non-possédé
+                                       // ConfigManager *config;   // Pointeur non-possédé
 
     /**
      * @brief Vérifie la validité des pointeurs

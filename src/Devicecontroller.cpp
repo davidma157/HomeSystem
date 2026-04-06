@@ -1,5 +1,6 @@
 #include "DeviceController.h"
 #include "ConfigManager.h"
+#include "Sensor.h"
 #include "TemperatureReader.h"
 #include "esp_log.h"
 #include "secretConfig.h"
@@ -13,48 +14,56 @@ DeviceController::DeviceController()
 
 void DeviceController::initialize()
 {
-    ESP_LOGD(TAG, "\n=== Initialisation du Device Controller ===");
+    ESP_LOGD(TAG, "═══ Initialisation du Device Controller ═══");
 
-    // 1. Configuration LED
-    configureLED();
-
-    // 4. Initialisation du réseau
+    ESP_LOGV(TAG, "1. Initialisation du réseau");
     initializeNetwork();
 
-    // 2. Chargement de la configuration
-    // configMgr.load();
+    ESP_LOGV(TAG, "2. Load config");
+    if (ConfigManager::loadConfig(&this->deviceConfig))
+    {
+        ConfigManager::printConfig(&this->deviceConfig);
+        configureLED();
 
-    // 3. Configuration du sleep manager
-    sleepMgr.configureLowPowerMode();
-    // sleepMgr.setTimerPeriod(configDevice.sleep_period);
-    sleepMgr.printWakeupReason();
+        if (this->deviceConfig.initialized)
+        {
+            network->setTopicIdentifiant(deviceConfig.id_device);
+        }
 
-    // 5. Initialisation du capteur
-    initializeSensor();
+        ESP_LOGV(TAG, "3. Configuration sleep manager");
+        sleepMgr.configureLowPowerMode();
+        sleepMgr.setTimerPeriod(deviceConfig.sleep_period);
+        ESP_LOGV(TAG, "Print Wakeup reason");
+        sleepMgr.printWakeupReason();
+
+        // 5. Initialisation du capteur
+        if (deviceConfig.initialized)
+        {
+            ESP_LOGV(TAG, "Initialisation des sensors");
+            initializeSensors();
+        }
 
 #ifdef DEBUG_MODE
-    Serial.println("\n╔═══════════════════════════════════════╗");
-    Serial.println("║     MODE DEBUG ACTIVÉ                 ║");
-    Serial.println("║  • Deep sleep DÉSACTIVÉ               ║");
-    Serial.println("║  • USB Serial reste actif             ║");
-    Serial.println("╚═══════════════════════════════════════╝");
-    Serial.println("═══════════════════════════════════════════\n");
+        ESP_LOGD(TAG, "╔═══════════════════════════════════════╗");
+        ESP_LOGD(TAG, "║     MODE DEBUG ACTIVÉ                 ║");
+        ESP_LOGD(TAG, "║  • Deep sleep DÉSACTIVÉ               ║");
+        ESP_LOGD(TAG, "║  • USB Serial reste actif             ║");
+        ESP_LOGD(TAG, "╚═══════════════════════════════════════╝\n");
 #endif
 
-    isInitialized = true;
-    ESP_LOGD(TAG, "✓ Initialisation terminée avec succès");
+        isInitialized = true;
+        ESP_LOGD(TAG, "✓ Initialisation terminée avec succès");
+    }
 }
 
 void DeviceController::run()
 {
-    ESP_LOGD(TAG, "START");
+    ESP_LOGD(TAG, "════════════ Démarrage du cycle principal ════════════");
     if (!isInitialized)
     {
         ESP_LOGE(TAG, "ERREUR: DeviceController non initialisé");
         return;
     }
-
-    ESP_LOGD(TAG, "\n=== Démarrage du cycle principal ===");
 
     // 1. Connexion réseau
     if (!connectToWiFi() || !connectToMQTT())
@@ -62,18 +71,16 @@ void DeviceController::run()
         handleConnectionFailure();
         return;
     }
-    ConfigManager::load();
-    deviceConfig = ConfigManager::getConfig();
 
     // TODO - revoir la séquence
-    if (configInitialized)
+    if (this->deviceConfig.initialized)
     {
         ESP_LOGD(TAG, "Config Initialized");
         /* code */
         subscribeToTopics();
 
         // 2. Attendre l'ID device si nécessaire
-        if (deviceConfig->id_device == 0)
+        if (deviceConfig.id_device == 0)
         {
             waitForDeviceId();
         }
@@ -88,7 +95,7 @@ void DeviceController::run()
         executeSensorJob();
 
         // 6. Message de fin
-        publishSleepMessage();
+        //        publishSleepMessage();
     }
     else
     {
@@ -101,7 +108,7 @@ void DeviceController::run()
 
 void DeviceController::shutdown()
 {
-    ESP_LOGD(TAG, "\n=== Arrêt du système ===");
+    ESP_LOGD(TAG, "══════ Arrêt du système ══════");
 
     if (network)
     {
@@ -115,51 +122,57 @@ void DeviceController::shutdown()
 bool DeviceController::update(char *configJson)
 {
     ESP_LOGD(TAG, "-----------------------------------------------------------------------------------");
-    bool needsSave = false;
+    bool needsRestart = false;
 
-    if (macVerify(configJson))
+    DeviceConfig config;
+    ConfigManager::extractConfig(configJson, &config);
+    ESP_LOGD(TAG, "Print config reçue");
+    ConfigManager::printConfig(&config);
+
+    if (strcmp(config.mac, network->getMacAddress()) != 0)
     {
-        this->deviceConfig = ConfigManager::extractConfig(configJson);
+        ESP_LOGD(TAG, "Mac:'%s' -- NetMAC:'%s'", config.mac, network->getMacAddress());
+        ESP_LOGD(TAG, "✗ MAC ne correspond pas ");
+        return false;
     }
 
-    if (needsSave)
+    if (this->deviceConfig == config)
     {
-        ConfigManager::save(configJson);
-
-        configMgr.printConfig();
-        ESP_LOGI(TAG, "✓ Configuration mise à jour:");
-
-        // TODO -- Revoir le message
-        network->publish(TopicType::CFG, "Config saved");
+        ESP_LOGI(TAG, "✓ Configuration identique");
+        return needsRestart;
     }
 
-    return needsSave;
+    ESP_LOGD(TAG, "Print config avant et après mise à jour");
+    ConfigManager::printConfig(&this->deviceConfig);
+    this->deviceConfig = config;
+    ConfigManager::printConfig(&this->deviceConfig);
+
+    // TODO - Vérifier s'il y a des changements avant de sauvegarder
+    ConfigManager::save(&this->deviceConfig);
+
+    ESP_LOGI(TAG, "✓ Configuration mise à jour:");
+    network->publish(TopicType::CFG, "Config saved");
+    needsRestart = true;
+
+    return needsRestart;
 }
 
 // ========== Méthodes d'initialisation ==========
 
 bool DeviceController::macVerify(char *configJson)
 {
-    // TODO -- Vérification MAC
-    /*
-    const char *pos = ConfigManager::jsonFindValue(configJson, "MAC");
-    if (!pos)
-    {
-        ESP_LOGE(TAG,"✗ Pas de MAC dans le message");
-        return false;
-    }
-
+    // TODO n'est plus utilisée
     char mac[20];
-    ConfigManager::jsonExtractString(pos, mac, sizeof(mac));
+    ConfigManager::getMac(configJson, mac, sizeof(mac));
 
-    // Vérifier que la MAC correspond
     if (strcmp(mac, network->getMacAddress()) != 0)
     {
-        ESP_LOGE(TAG,"✗ MAC ne correspond pas");
+        ESP_LOGD(TAG, "✗ MAC ne correspond pas");
         return false;
     }
-    ESP_LOGD(TAG,"---MAC OK");
-    */
+
+    ESP_LOGD(TAG, "MAC:%s", mac);
+
     return true;
 }
 
@@ -188,16 +201,35 @@ void DeviceController::initializeNetwork()
     ESP_LOGI(TAG, "✓ NetworkManager créé");
 }
 
-void DeviceController::initializeSensor()
+void DeviceController::initializeSensors()
 {
-    ESP_LOGD(TAG, "Initialisation du capteur...");
+    ESP_LOGD(TAG, "Initialisation des Capteurs ...");
 
-    // TODO - Changer la logique
-    //    sensor->setup(network.get());
-    //  network->setTopicParameters(configDevice.id_device);
-    // sensor->begin();
+    Sensor *sensor = nullptr;
+    for (size_t i = 0; i < deviceConfig.num_sensors; i++)
+    {
+        SensorData *sd = &deviceConfig.sensors[i];
+        switch (sd->role)
+        {
+        case SensorRole::TEMPERATURE:
+            ESP_LOGD(TAG, "New TemperatureReader()");
+            sensor = new TemperatureReader(network.get(), deviceConfig.id_device, sd);
+            sensors[i] = sensor;
+            nbSensors++;
+            break;
 
-    ESP_LOGD(TAG, "✓ Capteur initialisé");
+        case SensorRole::WATER_DETECTION:
+            ESP_LOGD(TAG, "New WATER_DETECTION");
+            break;
+        case SensorRole::UNDEFINED:
+            ESP_LOGE(TAG, "UNDEFINED sensor");
+            break;
+        default:
+            break;
+        }
+    }
+
+    ESP_LOGD(TAG, "✓ Capteurs initialisés");
 }
 
 // ========== Méthodes de connexion ==========
@@ -207,7 +239,7 @@ void DeviceController::initializeSensor()
  */
 bool DeviceController::connectToWiFi()
 {
-    ESP_LOGD(TAG, "\n--- Connexion WiFi ---");
+    ESP_LOGD(TAG, "--- Connexion WiFi ---");
 
     uint8_t attempt = 0;
     while (!network->isWiFiConnected() && attempt < MAX_WIFI_RETRIES)
@@ -267,11 +299,11 @@ void DeviceController::subscribeToTopics()
 
 void DeviceController::waitForDeviceId()
 {
-    ESP_LOGD(TAG, "\n--- Attente de l'ID device ---");
+    ESP_LOGD(TAG, "════════ Attente de l'ID device ════════");
 
     snprintf(payloadBuffer, sizeof(payloadBuffer),
              "{\"id_device\":%d,\"mac\":\"%s\"}",
-             deviceConfig->id_device, network->getMacAddress());
+             deviceConfig.id_device, network->getMacAddress());
 
     if (!network->publish(TopicType::STATUS, payloadBuffer))
     {
@@ -281,7 +313,7 @@ void DeviceController::waitForDeviceId()
 
     unsigned long startTime = millis();
 
-    while (deviceConfig->id_device == 0 &&
+    while (deviceConfig.id_device == 0 &&
            (millis() - startTime) < DEVICE_ID_TIMEOUT_MS)
     {
         network->mqttLoop();
@@ -290,15 +322,15 @@ void DeviceController::waitForDeviceId()
     }
     Serial.println();
 
-    if (deviceConfig->id_device == 0)
+    if (deviceConfig.id_device == 0)
     {
         ESP_LOGE(TAG, "⚠ Timeout: Aucun ID reçu");
         esp_restart();
     }
     else
     {
-        ESP_LOGD(TAG, "✓ ID reçu: %d\n", deviceConfig->id_device);
-        network->setTopicParameters(deviceConfig->id_device);
+        ESP_LOGD(TAG, "✓ ID reçu: %d", deviceConfig.id_device);
+        network->setTopicIdentifiant(deviceConfig.id_device);
         network->subscribeToTopics();
     }
 }
@@ -318,19 +350,11 @@ void DeviceController::waitForMqttMessages()
 
 void DeviceController::executeSensorJob()
 {
-    ESP_LOGD(TAG, "\n--- Exécution tâche capteur ---");
-    // TODO
-    /*
-    if (sensor)
+    ESP_LOGV(TAG, "================= Exécution tâche capteur. Nb Sensors:%d ===========", nbSensors);
+    for (size_t i = 0; i < nbSensors; i++)
     {
-        sensor->executeJob();
-        ESP_LOGD(TAG,"✓ Tâche capteur terminée");
+        sensors[i]->executeJob();
     }
-    else
-    {
-        ESP_LOGE(TAG,"✗ Capteur non disponible");
-    }
-    */
 }
 
 // ========== Méthodes de publication ==========
@@ -339,7 +363,7 @@ void DeviceController::publishStatus(const char *status)
 {
     snprintf(payloadBuffer, sizeof(payloadBuffer),
              "{\"id_device\":%d,\"status\":\"%s\"}",
-             deviceConfig->id_device, status);
+             deviceConfig.id_device, status);
 
     network->publish(TopicType::STATUS, payloadBuffer);
 }
@@ -356,7 +380,7 @@ void DeviceController::publishSleepMessage()
 
     snprintf(payloadBuffer, sizeof(payloadBuffer),
              "{\"id_device\":%d,\"status\":\"go_to_sleep\"}",
-             deviceConfig->id_device);
+             deviceConfig.id_device);
 
     // TODO rtcConfig->counter++;
     // TODO - Vérifier configMgr.save();
@@ -379,10 +403,12 @@ void DeviceController::handleConnectionFailure()
 void DeviceController::prepareForSleep()
 {
 #ifdef DEBUG_MODE
-    ESP_LOGD(TAG, "\n=== MODE DEBUG - SLEEP DÉSACTIVÉ ===");
+    ESP_LOGD(TAG, "=============== MODE DEBUG - SLEEP DÉSACTIVÉ ===============");
     ESP_LOGD(TAG, "L'USB reste actif pour le debugging");
-    ESP_LOGD(TAG, "Sleep period: %d secondes\n", deviceConfig->sleep_period);
-    ESP_LOGD(TAG, "I'mAlive period: %d secondes\n", deviceConfig->im_alive_period);
+    ESP_LOGD(TAG, "Sleep period: %d secondes", deviceConfig.sleep_period);
+    ESP_LOGD(TAG, "I'mAlive period: %d secondes", deviceConfig.im_alive_period);
+    ESP_LOGD(TAG, "============================================================\n");
+
 #else
     ESP_LOGD(TAG, "\n=== Passage en deep sleep ===");
     delay(100);

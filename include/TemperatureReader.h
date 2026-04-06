@@ -1,9 +1,9 @@
 #ifndef TEMPERATURE_READER_H
 #define TEMPERATURE_READER_H
 
+#include "ConfigManager.h"
 #include "DHTesp.h"
 #include "Sensor.h"
-// #include <vector>
 
 #ifdef ESP32
 // #pragma message("THIS EXAMPLE IS FOR ESP8266 ONLY!")
@@ -14,16 +14,23 @@
 #define DHTPIN D2     // Pin GPIO (ajustez selon votre branchement)
 #define DHTTYPE DHT22 // Type de capteur DHT22
 
+struct Config
+{
+    int id;
+    const char *pinNameDHT = "pin"; // TODO renommer pour  "DHTPIN";
+    int pinDHT;
+    uint8_t version = 2;
+    uint8_t sequenceNumber = 0;
+};
+
 class TemperatureReader : public Sensor
 {
 public:
-    TemperatureReader();
+    TemperatureReader(NetworkManager *network, int deviceId, SensorData *sd);
     ~TemperatureReader();
 
     // const char* getTopicDomain() const override {return topicDomain;};
     // Implémentation des méthodes virtuelles
-    void begin() override;
-    bool updateConfig(char *config) override; // Pas de configuration particulière.
     void executeJob() override;
 
     const char *getTopicDomain() const override { return TemperatureReader::topicDomain; };
@@ -33,18 +40,12 @@ public:
     void debugMode() {};
 #endif
 private:
-    // std::vector<Sensor *> attributs;
-    uint8_t version = 2;
-    uint8_t sequenceNumber = 0;
+    Config config;
 
     static constexpr const char *topicDomain = "temp";
     static constexpr const char *description = "TODO";
 
-    // DHT dht(DHTPIN, DHTTYPE);
-    //  DHT_Unified dht(DHTPIN, DHTTYPE);
     DHTesp dht;
-
-    // Méthodes spécifiques au détecteur d'eau
 };
 
 #endif

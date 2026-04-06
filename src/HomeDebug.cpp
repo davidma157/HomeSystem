@@ -32,13 +32,24 @@ void HomeDebug::simulSleepPeriod()
     {
         if (currentTime - lastCheckSleep >= deviceCtrl->getSleepPeriod() * 1000)
         {
+            // Ajout du linefeed après les ......
+            Serial.println();
             lastCheckSleep = currentTime;
             deviceCtrl->executeSensorJob();
-            ESP_LOGD(TAG, "SleepPeriod : Attente de %llu sec\n\n", deviceCtrl->getSleepPeriod());
+            ESP_LOGD(TAG, "SleepPeriod : Attente de %llu sec", deviceCtrl->getSleepPeriod());
         }
         else
         {
             deviceCtrl->debugMode();
+        }
+    }
+    else
+    {
+        // Affichage du message une seule fois.
+        if (!noSleepMsgSent)
+        {
+            ESP_LOGD(TAG, "SleepPeriod ==0 --> executeJob() n'est jamais appellé\n", deviceCtrl->getSleepPeriod());
+            noSleepMsgSent = true;
         }
     }
 }
@@ -75,7 +86,7 @@ void HomeDebug::printDot()
 
 void HomeDebug::exec()
 {
-    connectNetwork();
+
     // Get message from MQTT
     network->mqttLoop();
     currentTime = millis();
