@@ -197,9 +197,6 @@ void loop()
         homeDebug = std::make_unique<HomeDebug>(
             deviceCtrl->getNetworkManager(),
             deviceCtrl.get());
-
-        // controller->jsonPrintConfig(payload_buffer, bufferSize);
-        // ESP_LOGD(TAG,"Configuration: %s\n", payload_buffer);
     }
 
     if (homeDebug)

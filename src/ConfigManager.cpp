@@ -97,12 +97,12 @@ DeviceConfig *ConfigManager::getConfig()
 
 void ConfigManager::extractConfig(char *configJson, DeviceConfig *config)
 {
-    config->id_device = ConfigManager::jsonExtractInt(configJson, "ID");
-    ConfigManager::jsonExtractString(configJson, "MAC", config->mac, sizeof(config->mac));
-    config->sleep_period = ConfigManager::jsonExtractInt(configJson, "SLEEP");
-    config->im_alive_period = ConfigManager::jsonExtractInt(configJson, "ALIVE");
+    config->id_device = ConfigManager::jsonExtractInt(configJson, JTAG_ID);
+    ConfigManager::jsonExtractString(configJson, JTAG_MAC, config->mac, sizeof(config->mac));
+    config->sleep_period = ConfigManager::jsonExtractInt(configJson, JTAG_SLEEP);
+    config->im_alive_period = ConfigManager::jsonExtractInt(configJson, JTAG_ALIVE);
 
-    const char *arrayPtr = ConfigManager::findArrayStart(configJson, "SS");
+    const char *arrayPtr = ConfigManager::findArrayStart(configJson, JTAG_SENSORS);
     if (arrayPtr != nullptr)
     {
         char sensorJson[512];
@@ -122,7 +122,7 @@ void ConfigManager::extractConfig(char *configJson, DeviceConfig *config)
 
             ESP_LOGV(TAG, "SensorJson:%s", sensorJson);
 
-            int id = ConfigManager::jsonExtractInt(sensorJson, "ID");
+            int id = ConfigManager::jsonExtractInt(sensorJson, JTAG_ID);
             ESP_LOGV(TAG, "ID:%d", id);
             sensorData->id_sensor = id;
 
@@ -130,7 +130,7 @@ void ConfigManager::extractConfig(char *configJson, DeviceConfig *config)
             sensorData->num_attributes = 0;
 
             // 2. Extraction des attributs (ex: pins)
-            const char *attrPtr = ConfigManager::findArrayStart(sensorJson, "ATTS");
+            const char *attrPtr = ConfigManager::findArrayStart(sensorJson, JTAG_ATTRIBUTS);
             ESP_LOGV(TAG, "attrPtr:%s", attrPtr);
             if (attrPtr != nullptr)
             {
@@ -148,13 +148,13 @@ void ConfigManager::extractConfig(char *configJson, DeviceConfig *config)
                     }
                     indxAttr++;
                     char key[8];
-                    ConfigManager::jsonExtractString(attrBuf, "KEY", key, sizeof(key));
+                    ConfigManager::jsonExtractString(attrBuf, JTAG_KEY, key, sizeof(key));
 
                     strncpy(data->key, key, 8);
                     ESP_LOGV(TAG, "KEY:%s", key);
                     if (attrBuf)
                     {
-                        data->value = ConfigManager::jsonExtractInt(attrBuf, "VAL");
+                        data->value = ConfigManager::jsonExtractInt(attrBuf, JTAG_VALUE);
                     }
                 }
             }
@@ -169,7 +169,7 @@ const char *ConfigManager::jsonFindValue(const char *json, const char *key)
     char search[128];
     snprintf(search, sizeof(search), "\"%s\":", key);
 
-    ESP_LOGV(TAG, "FindValue: <%s>\n", search);
+    //    ESP_LOGV(TAG, "FindValue: <%s>\n", search);
     const char *pos = strstr(json, search);
     if (!pos)
         return nullptr;
@@ -255,10 +255,19 @@ SensorRole ConfigManager::getRole(char *sensorJson)
 {
     char role[20];
     ConfigManager::jsonExtractString(sensorJson, "ROLE", role, sizeof(role));
-    if (strcmp(role, "TEMPERATURE") == 0)
+    if (strcmp(role, ROLE_TEMPERATURE) == 0)
     {
         return SensorRole::TEMPERATURE;
     }
+    else if (strcmp(role, ROLE_VALVE) == 0)
+    {
+        return SensorRole::VALVE;
+    }
+    else if (strcmp(role, ROLE_WATER_DETECTION) == 0)
+    {
+        return SensorRole::WATER_DETECTION;
+    }
+
     return SensorRole::UNDEFINED;
 }
 
@@ -276,7 +285,6 @@ void ConfigManager::printConfig(DeviceConfig *config)
 
     for (size_t i = 0; i < config->num_sensors; i++)
     {
-        char *sensorIndex = indxBuffer;
         SensorData *sd = &config->sensors[i];
 
         indxBuffer += snprintf(indxBuffer, bufferSize, "\n\t\tSensor(ID:%d, Role:%d, Attr(%d))", sd->id_sensor, sd->role, sd->num_attributes);

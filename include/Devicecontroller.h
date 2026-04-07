@@ -39,9 +39,9 @@ public:
     int getSleepPeriod() const { return deviceConfig.sleep_period; }
     int getAlivePeriod() const { return deviceConfig.im_alive_period; }
 
-#ifdef DEBUG_MODE
+    // #ifdef DEBUG_MODE
     void debugMode() {};
-#endif
+    // #endif
 
 private:
     // ===== Composants du système =====

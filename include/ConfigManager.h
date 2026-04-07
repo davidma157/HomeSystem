@@ -12,10 +12,35 @@
 #define MAX_SENSORS 4
 #define MAX_ATTRIBUTES 4
 
+/*═════ JSON TAGS ═══════════════════════════════════════════════════════════════════════════════*/
+// Message de configuration
+//  {"ID":32,"MAC":"58:8C:81:B0:D8:9C","SLEEP":120,"ALIVE":0,
+//   "SS":[ {"ID":51,"ROLE":"TEMPERATURE","ATTS":[{"KEY":"pin","VAL":11},{"KEY":"pin2","VAL":2}]},
+//         {"ID":52,"ROLE":"VALVE","ATTS":[]}
+//       ]
+// }
+
+#define JTAG_ID "ID"
+#define JTAG_MAC "MAC"
+#define JTAG_SLEEP "SLEEP"
+#define JTAG_ALIVE "ALIVE"
+#define JTAG_SENSORS "SS"
+#define JTAG_ROLE "ROLE"
+#define JTAG_ATTRIBUTS "ATTS"
+#define JTAG_KEY "KEY"
+#define JTAG_VALUE "VAL"
+
+#define ROLE_TEMPERATURE "TEMPERATURE"
+#define ROLE_WATER_DETECTION "WD"
+#define ROLE_VALVE "VALVE"
+
+/*═════ JSON TAGS FIN ═════════════════════════════════════════════════════════════════════════════*/
+
 enum class SensorRole
 {
     UNDEFINED,
     TEMPERATURE,
+    VALVE,
     WATER_DETECTION
 };
 

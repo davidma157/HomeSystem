@@ -413,7 +413,7 @@ void DeviceController::prepareForSleep()
     ESP_LOGD(TAG, "\n=== Passage en deep sleep ===");
     delay(100);
 
-    if (config.getSleepPeriod() > 0)
+    if (deviceConfig.sleep_period > 0)
     {
         sleepMgr.goToDeepSleep();
     }
