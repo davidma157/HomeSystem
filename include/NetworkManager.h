@@ -1,33 +1,15 @@
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
+#include "JsonHelper.h"
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
-
-#define TOPIC_TEMPLATE_PUBLISH "home/sensor/ID-%d%s"
-#define TOPIC_TEMPLATE_SUBSCRIBE "home/to-sensor/ID-%d/#"
 
 // Seuils RSSI pour évaluer la qualité du signal
 #define RSSI_EXCELLENT -50 // Signal excellent, pas besoin d'augmenter la puissance
 #define RSSI_GOOD -67      // Signal bon, acceptable pour un usage normal
 #define RSSI_POOR -80      // Signal faible, qualité insuffisante
-
-struct TopicInfo
-{
-    int id_device = 0;
-    char domain[20];
-};
-
-enum class TopicType
-{
-    STATUS,
-    CFG,
-    DATA,
-    ALERT,
-    MAC_IP,
-    RECEIVER,
-};
 
 struct WiFiQuality
 {
@@ -71,28 +53,6 @@ private:
     // Vaut WIFI_POWER_MINUS_1dBm tant qu'aucune valeur n'a encore été déterminée.
     wifi_power_t optimalPowerLevel;
     bool optimalPowerFound; // true dès qu'une valeur optimale a été établie
-
-    // ── Helpers topic ────────────────────────────────────────────────────────
-    const char *topicTypeToString(TopicType c)
-    {
-        switch (c)
-        {
-        case TopicType::ALERT:
-            return "/alert";
-        case TopicType::CFG:
-            return "/cfg-updated";
-        case TopicType::DATA:
-            return "/data";
-        case TopicType::MAC_IP:
-            return "/mac-ip";
-        case TopicType::STATUS:
-            return "/status";
-        case TopicType::RECEIVER:
-            return "";
-        default:
-            return "error";
-        }
-    }
 
     // ── Gestion de la puissance (privé) ──────────────────────────────────────
     void setWiFiPower(wifi_power_t power);
@@ -147,7 +107,7 @@ public:
 
     // ── Publishing ───────────────────────────────────────────────────────────
     void setTopicIdentifiant(int idDevice);
-    bool publish(TopicType topicDomain, const char *payload);
+    bool publish(const char *topicType, const char *payload);
 
     // ── Subscription ─────────────────────────────────────────────────────────
     bool subscribeToTopics();

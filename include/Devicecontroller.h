@@ -2,6 +2,7 @@
 #define DEVICE_CONTROLLER_H
 
 #include "ConfigManager.h"
+#include "JsonHelper.h"
 #include "NetworkManager.h"
 #include "Sensor.h"
 #include "SleepManager.h"
@@ -32,7 +33,6 @@ public:
     // Accesseurs pour callbacks externes
     NetworkManager *getNetworkManager() { return network.get(); }
     ConfigManager *getConfigManager() { return &configMgr; }
-    // TODO Sensor *getSensor() { return sensor; }
     void executeSensorJob();
 
     int getDeviceId() const { return deviceConfig.id_device; }
@@ -54,15 +54,9 @@ private:
     std::unique_ptr<NetworkManager> network;
 
     // ===== État interne =====
-    bool isInitialized;
     char payloadBuffer[256];
 
     // ===== Méthodes privées =====
-    // TODO -- addSensor
-    void addSensor() {};
-    bool extractConfig(char *configJson);
-    bool macVerify(char *configJson);
-
     void configureLED();
     void initializeNetwork();
     void initializeSensors();

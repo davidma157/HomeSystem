@@ -1,9 +1,11 @@
 #ifndef CONFIG_MANAGER_H
 #define CONFIG_MANAGER_H
 
+#include "JsonHelper.h"
 #include "esp_log.h"
 #include <Arduino.h>
 #include <Preferences.h>
+#include <regex>
 
 #define TAG_CONFIG "tagConfig"
 #define NAME_SPACE_CONFIG "nameSpaceConfig"
@@ -11,30 +13,6 @@
 #define ATTR_KEY_SIZE 8
 #define MAX_SENSORS 4
 #define MAX_ATTRIBUTES 4
-
-/*═════ JSON TAGS ═══════════════════════════════════════════════════════════════════════════════*/
-// Message de configuration
-//  {"ID":32,"MAC":"58:8C:81:B0:D8:9C","SLEEP":120,"ALIVE":0,
-//   "SS":[ {"ID":51,"ROLE":"TEMPERATURE","ATTS":[{"KEY":"pin","VAL":11},{"KEY":"pin2","VAL":2}]},
-//         {"ID":52,"ROLE":"VALVE","ATTS":[]}
-//       ]
-// }
-
-#define JTAG_ID "ID"
-#define JTAG_MAC "MAC"
-#define JTAG_SLEEP "SLEEP"
-#define JTAG_ALIVE "ALIVE"
-#define JTAG_SENSORS "SS"
-#define JTAG_ROLE "ROLE"
-#define JTAG_ATTRIBUTS "ATTS"
-#define JTAG_KEY "KEY"
-#define JTAG_VALUE "VAL"
-
-#define ROLE_TEMPERATURE "TEMPERATURE"
-#define ROLE_WATER_DETECTION "WD"
-#define ROLE_VALVE "VALVE"
-
-/*═════ JSON TAGS FIN ═════════════════════════════════════════════════════════════════════════════*/
 
 enum class SensorRole
 {
@@ -121,10 +99,10 @@ private:
 public:
     static void extractConfig(char *configJson, DeviceConfig *config);
     // Persistence
-    static bool loadConfig(DeviceConfig *config);
+    static bool load(DeviceConfig *config);
     static void save(DeviceConfig *config);
     static void reset();
-    //  static DeviceConfig *getConfig();
+    static bool isValidMacAddress(const char *mac);
     static void printConfig(DeviceConfig *config);
     static void getMac(char *configJson, char *dest, int destLen);
 };

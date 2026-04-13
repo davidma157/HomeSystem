@@ -45,9 +45,11 @@ public:
         char message[msgLength];
         if (length > msgLength)
         {
-            // TODO - Publier un message.
+            NetworkManager *network = instance->getNetworkManager();
+            network->publish(TOPIC_PUB_ERROR, "Message de configuration trop long. Max:512");
+
             ESP_LOGE(TAG, "Message reçu dépasse la longueur du buffer.");
-            ESP_LOGE(TAG, "Topic: %s\nMessage: %s\n", topic, message);
+            ESP_LOGE(TAG, "Topic: %s\nMessage: %s\n", topic, (char *)payload);
         }
 
         size_t copyLength = (length >= sizeof(message)) ? sizeof(message) - 1 : length;
@@ -58,15 +60,15 @@ public:
         ESP_LOGD(TAG, "Message: %s", message);
 
         // Dispatcher les commandes
-        if (strstr(topic, "config") != nullptr)
+        if (strstr(topic, TOPIC_SUB_CFG_SET) != nullptr)
         {
             handleConfigUpdate(message);
         }
-        else if (strstr(topic, "restart") != nullptr)
+        else if (strstr(topic, TOPIC_SUB_RESTART) != nullptr)
         {
             handleRestart();
         }
-        else if (strstr(topic, "get_mac") != nullptr)
+        else if (strstr(topic, TOPIC_SUB_GET_MAC_IP) != nullptr)
         {
             handleMacRequest();
         }
@@ -96,20 +98,6 @@ private:
         {
             handleRestart();
         }
-
-        // Sauvegarder et publier si nécessaire
-        /*
-        //TODO -- Ménage
-        if (needsSave)
-        {
-            config->save();
-            instance->jsonPrintConfig(payload_buffer, bufferSize);
-            ESP_LOGD(TAG,"✓ Configuration mise à jour:");
-            ESP_LOGD(TAG,payload_buffer);
-
-            network->publish(TopicType::CFG, payload_buffer);
-        }
-        */
     }
 
     static void handleRestart()
@@ -134,7 +122,7 @@ private:
                      network->getIPAddress(),
                      network->getMacAddress());
 
-            network->publish(TopicType::MAC_IP, payload_buffer);
+            network->publish(TOPIC_PUB_MAC_IP, payload_buffer);
             ESP_LOGD(TAG, "✓ MAC/IP envoyé");
         }
     }

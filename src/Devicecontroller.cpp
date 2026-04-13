@@ -8,7 +8,7 @@
 const char TAG[] = "DEV_CTRL";
 
 DeviceController::DeviceController()
-    : sleepMgr(GPIO_NUM_4), isInitialized(false)
+    : sleepMgr(GPIO_NUM_4)
 {
 }
 
@@ -20,7 +20,7 @@ void DeviceController::initialize()
     initializeNetwork();
 
     ESP_LOGV(TAG, "2. Load config");
-    if (ConfigManager::loadConfig(&this->deviceConfig))
+    if (ConfigManager::load(&this->deviceConfig))
     {
         ConfigManager::printConfig(&this->deviceConfig);
         configureLED();
@@ -50,8 +50,6 @@ void DeviceController::initialize()
         ESP_LOGD(TAG, "║  • USB Serial reste actif             ║");
         ESP_LOGD(TAG, "╚═══════════════════════════════════════╝\n");
 #endif
-
-        isInitialized = true;
         ESP_LOGD(TAG, "✓ Initialisation terminée avec succès");
     }
 }
@@ -59,7 +57,8 @@ void DeviceController::initialize()
 void DeviceController::run()
 {
     ESP_LOGD(TAG, "════════════ Démarrage du cycle principal ════════════");
-    if (!isInitialized)
+    // TODO -Revoir le flag initialized
+    if (!deviceConfig.initialized)
     {
         ESP_LOGE(TAG, "ERREUR: DeviceController non initialisé");
         return;
@@ -126,6 +125,11 @@ bool DeviceController::update(char *configJson)
 
     DeviceConfig config;
     ConfigManager::extractConfig(configJson, &config);
+    if (!config.initialized)
+    {
+        return needsRestart;
+    }
+
     ESP_LOGD(TAG, "Print config reçue");
     ConfigManager::printConfig(&config);
 
@@ -133,47 +137,25 @@ bool DeviceController::update(char *configJson)
     {
         ESP_LOGD(TAG, "Mac:'%s' -- NetMAC:'%s'", config.mac, network->getMacAddress());
         ESP_LOGD(TAG, "✗ MAC ne correspond pas ");
-        return false;
+        return needsRestart;
     }
 
+    // TODO - Valider que la comparaison fonctionne correctement
     if (this->deviceConfig == config)
     {
         ESP_LOGI(TAG, "✓ Configuration identique");
         return needsRestart;
     }
 
-    ESP_LOGD(TAG, "Print config avant et après mise à jour");
-    ConfigManager::printConfig(&this->deviceConfig);
     this->deviceConfig = config;
-    ConfigManager::printConfig(&this->deviceConfig);
-
-    // TODO - Vérifier s'il y a des changements avant de sauvegarder
+    ESP_LOGD(TAG, "Sauvegarde Config");
     ConfigManager::save(&this->deviceConfig);
 
     ESP_LOGI(TAG, "✓ Configuration mise à jour:");
-    network->publish(TopicType::CFG, "Config saved");
+    network->publish(TOPIC_PUB_CFG_OK, "{\"action\":\"Config saved\"}");
     needsRestart = true;
 
     return needsRestart;
-}
-
-// ========== Méthodes d'initialisation ==========
-
-bool DeviceController::macVerify(char *configJson)
-{
-    // TODO n'est plus utilisée
-    char mac[20];
-    ConfigManager::getMac(configJson, mac, sizeof(mac));
-
-    if (strcmp(mac, network->getMacAddress()) != 0)
-    {
-        ESP_LOGD(TAG, "✗ MAC ne correspond pas");
-        return false;
-    }
-
-    ESP_LOGD(TAG, "MAC:%s", mac);
-
-    return true;
 }
 
 void DeviceController::configureLED()
@@ -305,7 +287,7 @@ void DeviceController::waitForDeviceId()
              "{\"id_device\":%d,\"mac\":\"%s\"}",
              deviceConfig.id_device, network->getMacAddress());
 
-    if (!network->publish(TopicType::STATUS, payloadBuffer))
+    if (!network->publish(TOPIC_PUB_STATUS, payloadBuffer))
     {
         ESP_LOGE(TAG, "Échec publication demande ID");
         return;
@@ -337,7 +319,7 @@ void DeviceController::waitForDeviceId()
 
 void DeviceController::waitForMqttMessages()
 {
-    ESP_LOGD(TAG, "\n--- Attente messages MQTT ---");
+    ESP_LOGD(TAG, "--- Attente messages MQTT ---");
 
     for (uint8_t i = 0; i < MAX_MQTT_WAIT_LOOPS; i++)
     {
@@ -365,27 +347,25 @@ void DeviceController::publishStatus(const char *status)
              "{\"id_device\":%d,\"status\":\"%s\"}",
              deviceConfig.id_device, status);
 
-    network->publish(TopicType::STATUS, payloadBuffer);
+    network->publish(TOPIC_PUB_STATUS, payloadBuffer);
 }
 
 void DeviceController::publishStartMessage()
 {
-    ESP_LOGD(TAG, "--- Démarrage ---");
-    publishStatus("start");
+    JsonHelper::getMessageStatus(payloadBuffer, sizeof(payloadBuffer), deviceConfig.id_device, "Start");
+    network->publish(TOPIC_PUB_STATUS, payloadBuffer);
 }
 
 void DeviceController::publishSleepMessage()
 {
     ESP_LOGD(TAG, "--- Publication message de sleep ---");
 
+    // TODO - Uniformiser les messages avec des TAGS
     snprintf(payloadBuffer, sizeof(payloadBuffer),
-             "{\"id_device\":%d,\"status\":\"go_to_sleep\"}",
-             deviceConfig.id_device);
+             "{\"%s\":%d,\"status\":\"go_to_sleep\"}",
+             JTAG_ID, deviceConfig.id_device);
 
-    // TODO rtcConfig->counter++;
-    // TODO - Vérifier configMgr.save();
-
-    network->publish(TopicType::STATUS, payloadBuffer);
+    network->publish(TOPIC_PUB_STATUS, payloadBuffer);
 }
 
 // ========== Gestion des erreurs ==========

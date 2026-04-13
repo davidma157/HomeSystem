@@ -3,6 +3,7 @@
 
 #include "ConfigManager.h"
 #include "DHTesp.h"
+#include "JsonHelper.h"
 #include "Sensor.h"
 
 #ifdef ESP32
@@ -13,11 +14,11 @@
 // Configuration du DHT22
 #define DHTPIN D2     // Pin GPIO (ajustez selon votre branchement)
 #define DHTTYPE DHT22 // Type de capteur DHT22
+#define DHT_PIN_NAME "PIN_DHT"
 
 struct Config
 {
     int id;
-    const char *pinNameDHT = "pin"; // TODO renommer pour  "DHTPIN";
     int pinDHT;
     uint8_t version = 2;
     uint8_t sequenceNumber = 0;

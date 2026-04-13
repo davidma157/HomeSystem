@@ -36,7 +36,7 @@ void HomeDebug::simulSleepPeriod()
             Serial.println();
             lastCheckSleep = currentTime;
             deviceCtrl->executeSensorJob();
-            ESP_LOGD(TAG, "SleepPeriod : Attente de %llu sec", deviceCtrl->getSleepPeriod());
+            ESP_LOGD(TAG, "SleepPeriod : Attente de %d sec", deviceCtrl->getSleepPeriod());
         }
         else
         {
@@ -67,7 +67,7 @@ void HomeDebug::simulAlivePeriod()
                      "{\"id_device\":\"%d\",\"status\":\"alive\"}",
                      deviceCtrl->getDeviceId());
             // config->incrementCounter();
-            network->publish(TopicType::STATUS, payload_buffer);
+            network->publish(TOPIC_PUB_STATUS, payload_buffer);
             ESP_LOGD(TAG, "AlivePeriod : Attente de %llu sec\n\n", deviceCtrl->getAlivePeriod());
         }
     }

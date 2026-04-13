@@ -49,9 +49,6 @@ void NetworkManager::setTimeouts(uint32_t wifiTimeout, uint32_t mqttTimeout)
     mqtt_timeout = mqttTimeout;
 }
 
-[[deprecated]]
-
-// TODO À revoir
 void NetworkManager::setTopicIdentifiant(int idDevice)
 {
     this->idDevice = idDevice;
@@ -401,11 +398,11 @@ bool NetworkManager::mqttLoop()
 //  Publishing / Subscription
 // ─────────────────────────────────────────────────────────────────────────────
 
-bool NetworkManager::publish(TopicType topicType, const char *payload)
+bool NetworkManager::publish(const char *topicType, const char *payload)
 {
     char topic[64];
-    snprintf(topic, sizeof(topic), TOPIC_TEMPLATE_PUBLISH,
-             this->idDevice, topicTypeToString(topicType));
+    snprintf(topic, sizeof(topic), TOPIC_PUB_TEMPLATE,
+             this->idDevice, topicType);
 
     if (!client.connected())
     {
@@ -428,19 +425,35 @@ bool NetworkManager::publish(TopicType topicType, const char *payload)
 bool NetworkManager::subscribeToTopics()
 {
     char topic_receiver[64];
-    snprintf(topic_receiver, sizeof(topic_receiver), TOPIC_TEMPLATE_SUBSCRIBE, // "home/to-sensor/ID-%d/#",
-             this->idDevice);
+    int qos = 1;
+    bool success = true;
 
-    if (client.subscribe(topic_receiver, 1))
+    for (size_t i = 0; i < 3; i++)
     {
+        switch (i)
+        {
+        case 0:
+            snprintf(topic_receiver, sizeof(topic_receiver), TOPIC_SUB_TEMPLATE,
+                     this->idDevice, TOPIC_SUB_CFG_SET);
+            break;
+        case 1:
+            snprintf(topic_receiver, sizeof(topic_receiver), TOPIC_SUB_TEMPLATE,
+                     this->idDevice, TOPIC_SUB_GET_MAC_IP);
+            break;
+        case 2:
+            snprintf(topic_receiver, sizeof(topic_receiver), TOPIC_SUB_TEMPLATE,
+                     this->idDevice, TOPIC_SUB_RESTART);
+            break;
+        }
+
         ESP_LOGD(TAG, "%s", topic_receiver);
-        return true;
+        if (!client.subscribe(topic_receiver, qos))
+        {
+            ESP_LOGE(TAG, "Échec abonnement à : %s\n", topic_receiver);
+            success = false;
+        }
     }
-    else
-    {
-        ESP_LOGE(TAG, "Échec abonnement à : %s\n", topic_receiver);
-        return false;
-    }
+    return success;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

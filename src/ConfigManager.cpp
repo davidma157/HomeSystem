@@ -8,62 +8,18 @@ RTC_DATA_ATTR bool rtcConfigValid = false;
 
 Preferences ConfigManager::preferences;
 
-/*
-//TODO ménage
-void ConfigManager::load()
-{
-    int bufferSize = 256;
-    char buffer[bufferSize] = "\0";
-
-    if (preferences.begin(NAME_SPACE_CONFIG, true))
-    {
-        bool initialized = preferences.getBool("initialized", false);
-
-        if (initialized)
-        {
-            const char *strConfig = (preferences.getString(TAG_CONFIG, "")).c_str();
-            strncpy(buffer, strConfig, bufferSize);
-            ESP_LOGD(TAG, "%s", buffer);
-        }
-        else
-        {
-            ESP_LOGD(TAG, "Configuration inexistante.");
-        }
-        preferences.end();
-
-        // TODO - Déplacer lors de la réception d'une nouvelle configuration.
-        // TODO Pour la durée du développement
-        ConfigManager::extractConfig(buffer);
-        ConfigManager::save(&rtcConfig);
-    }
-}
-
-void ConfigManager::save(char *json)
-{
-    preferences.begin(NAME_SPACE_CONFIG, false);
-    preferences.clear();
-
-    preferences.putBool("initialized", true);
-    preferences.putString(TAG_CONFIG, json);
-
-    preferences.end();
-    ESP_LOGD(TAG, "Configuration sauvegardée");
-}
-*/
-
-bool ConfigManager::loadConfig(DeviceConfig *config)
+bool ConfigManager::load(DeviceConfig *config)
 {
     preferences.begin("system", true);
-    size_t schLen = preferences.getBytesLength("config_bin");
 
+    size_t schLen = preferences.getBytesLength("config");
     if (schLen != sizeof(DeviceConfig))
     {
         ESP_LOGE(TAG, "Configuration invalide - N'a pas été chargée.");
         preferences.end();
         return false; // Configuration absente ou version différente
     }
-
-    preferences.getBytes("config_bin", config, sizeof(DeviceConfig));
+    preferences.getBytes("config", config, sizeof(DeviceConfig));
     preferences.end();
     return true;
 }
@@ -73,7 +29,7 @@ void ConfigManager::save(DeviceConfig *config)
 
     preferences.begin("system", false);
     // On sauvegarde toute la structure d'un coup comme un bloc de bytes
-    preferences.putBytes("config_bin", config, sizeof(DeviceConfig));
+    preferences.putBytes("config", config, sizeof(DeviceConfig));
     preferences.end();
 
     ESP_LOGD(TAG, "Configuration sauvegardée");
@@ -95,12 +51,32 @@ DeviceConfig *ConfigManager::getConfig()
 }
 */
 
+bool ConfigManager::isValidMacAddress(const char *mac)
+{
+    const std::regex pattern(
+        R"(^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}$)");
+    return std::regex_match(mac, pattern);
+}
+
 void ConfigManager::extractConfig(char *configJson, DeviceConfig *config)
 {
+    config->initialized = true;
     config->id_device = ConfigManager::jsonExtractInt(configJson, JTAG_ID);
+    if (config->id_device == INT_MIN)
+    {
+        config->initialized = false;
+        return;
+    }
+
     ConfigManager::jsonExtractString(configJson, JTAG_MAC, config->mac, sizeof(config->mac));
+    if (!isValidMacAddress(config->mac))
+    {
+        config->initialized = false;
+        return;
+    }
+
     config->sleep_period = ConfigManager::jsonExtractInt(configJson, JTAG_SLEEP);
-    config->im_alive_period = ConfigManager::jsonExtractInt(configJson, JTAG_ALIVE);
+    config->im_alive_period = ConfigManager::jsonExtractInt(configJson, JTAG_IM_ALIVE);
 
     const char *arrayPtr = ConfigManager::findArrayStart(configJson, JTAG_SENSORS);
     if (arrayPtr != nullptr)
@@ -209,7 +185,7 @@ int ConfigManager::jsonExtractInt(const char *json, const char *key)
 
         return atoi(pos);
     }
-    return 0;
+    return INT_MIN;
 }
 
 // Trouve le début du tableau "[" après une clé
